@@ -1,6 +1,6 @@
 import { FiGithub, FiLogIn, FiPlus } from 'react-icons/fi'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/features/auth/store'
+import { useAuth } from '@/features/user/store'
 import PrimaryButton from '@/shared/ui/actions/PrimaryButton'
 
 export default function DesktopNav() {

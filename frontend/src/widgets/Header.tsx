@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiGithub, FiLogIn, FiPlus, FiMenu, FiX } from 'react-icons/fi'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/features/auth/store'
+import { useAuth } from '@/features/user/store'
 import Card from '@/shared/ui/layout/Card'
 import Logo from '@/shared/ui/content/Logo'
 import PrimaryButton from '@/shared/ui/actions/PrimaryButton'
@@ -51,14 +51,13 @@ export default function Header() {
         <div className="flex h-(--header-h) items-center justify-between px-6">
           <Logo />
 
-          {/* Десктопная навигация */}
           <nav className="hidden md:flex items-center gap-6 text-sm text-zinc-400">
             <Link
               to="/posts/new"
               className="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-100"
             >
               <FiPlus className="size-4" />
-              Новый пост
+              Создать
             </Link>
             <a
               href="https://github.com/PixelLoop-uwu/hyperSharing"

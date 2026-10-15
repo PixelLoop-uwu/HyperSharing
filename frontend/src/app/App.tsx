@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MotionConfig } from 'framer-motion'
 import { RouterProvider } from 'react-router-dom'
 import { router } from '@/app/routes'
-import { useAuth } from '@/features/auth/store'
+import { useAuth } from '@/features/user/store'
 
 const queryClient = new QueryClient({
   defaultOptions: {
