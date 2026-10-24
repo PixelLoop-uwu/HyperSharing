@@ -6,7 +6,8 @@ import Card from '@/shared/ui/layout/Card'
 import GhostButton from '@/shared/ui/actions/GhostButton'
 import PrimaryButton from '@/shared/ui/actions/PrimaryButton'
 import StatusMark from '@/shared/ui/feedback/StatusMark'
-import { isBlank, useDigests, useDraftStore, usePublishStore } from '../model'
+import { isBlank } from '../lib'
+import { useDraftStore, usePublishStore } from '../store'
 
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
@@ -19,7 +20,6 @@ function Row({ label, value }: { label: string; value: string | number }) {
 
 export default function PublishPanel({ onPublish }: { onPublish: () => void }) {
   const sections = useDraftStore((s) => s.sections)
-  const digests = useDigests((s) => s.byFileId)
   const stage = usePublishStore((s) => s.stage)
   const progress = usePublishStore((s) => s.progress)
   const error = usePublishStore((s) => s.error)
@@ -27,21 +27,12 @@ export default function PublishPanel({ onPublish }: { onPublish: () => void }) {
 
   const stats = useMemo(() => {
     const files = sections.flatMap((s) => s.files)
-    let pending = 0
-    let failed = 0
-    for (const f of files) {
-      const d = digests[f.id]
-      if (!d || d.status === 'pending') pending += 1
-      else if (d.status === 'error') failed += 1
-    }
     return {
       sections: sections.filter((s) => !isBlank(s)).length,
       files: files.length,
       size: files.reduce((n, f) => n + f.file.size, 0),
-      pending,
-      failed,
     }
-  }, [sections, digests])
+  }, [sections])
 
   const busy = stage !== 'idle'
   const percent = progress && progress.total > 0 ? (progress.done / progress.total) * 100 : 0
@@ -49,7 +40,7 @@ export default function PublishPanel({ onPublish }: { onPublish: () => void }) {
     stage === 'drafting'
       ? 'Готовим пост'
       : stage === 'uploading'
-        ? `Загружаем файлы: ${progress?.done ?? 0} из ${progress?.total ?? 0}`
+        ? `Загружаем файлы: ${formatBytes(progress?.done ?? 0)} из ${formatBytes(progress?.total ?? 0)}`
         : 'Публикуем'
 
   return (
@@ -61,20 +52,6 @@ export default function PublishPanel({ onPublish }: { onPublish: () => void }) {
         <Row label="Файлы" value={stats.files} />
         <Row label="Размер" value={formatBytes(stats.size)} />
       </dl>
-
-      {stats.files > 0 && (
-        <p className="mt-4 flex items-center gap-2 text-sm text-zinc-400" aria-live="polite">
-          <StatusMark
-            status={stats.failed > 0 ? 'failed' : stats.pending > 0 ? 'running' : 'done'}
-            size={16}
-          />
-          {stats.failed > 0
-            ? `Не удалось обработать: ${stats.failed}`
-            : stats.pending > 0
-              ? `Обрабатываем файлы: ${stats.files - stats.pending} из ${stats.files}`
-              : 'Файлы готовы'}
-        </p>
-      )}
 
       {error && (
         <p role="alert" className="mt-4 text-sm text-red-400">

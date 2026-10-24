@@ -1,1 +1,0 @@
-"""FileSharing backend application package."""

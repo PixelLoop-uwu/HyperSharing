@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { FiGithub, FiLogIn, FiPlus, FiMenu, FiX } from 'react-icons/fi'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/user/store'
+import UserMenu from '@/features/user/ui/UserMenu'
 import Card from '@/shared/ui/layout/Card'
 import Logo from '@/shared/ui/content/Logo'
 import PrimaryButton from '@/shared/ui/actions/PrimaryButton'
@@ -68,15 +69,10 @@ export default function Header() {
               <FiGithub className="size-4" />
               GitHub
             </a>
-            {status === 'loading' ? null : user ? (
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="transition-colors hover:text-zinc-100"
-              >
-                Выйти
-              </button>
-            ) : (
+
+            {status === 'loading' ? null : user ? <UserMenu /> : null}
+            
+            {status === 'loading' || user ? null : (
               <PrimaryButton to="/login" size="sm" icon={<FiLogIn className="size-4" />}>
                 Войти
               </PrimaryButton>
@@ -116,6 +112,15 @@ export default function Header() {
                 <FiPlus className="size-4" />
                 Новый пост
               </Link>
+              {status === 'loading' ? null : user ? (
+                <Link
+                  to="/me"
+                  onClick={() => setIsOpen(false)}
+                  className="transition-colors hover:text-zinc-100"
+                >
+                  Профиль
+                </Link>
+              ) : null}
               <a
                 href="https://github.com/PixelLoop-uwu/hyperSharing"
                 target="_blank"

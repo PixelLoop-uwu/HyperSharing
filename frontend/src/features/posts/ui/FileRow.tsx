@@ -4,8 +4,7 @@ import { FiX } from 'react-icons/fi'
 import { formatBytes } from '@/shared/lib/format'
 import FileTypeIcon from '@/shared/ui/content/FileTypeIcon'
 import GhostButton from '@/shared/ui/actions/GhostButton'
-import StatusMark, { type StatusMarkStatus } from '@/shared/ui/feedback/StatusMark'
-import { useFileDigest, type FileRef } from '../model'
+import type { FileRef } from '../types'
 
 interface FileRowProps {
   file: FileRef
@@ -13,10 +12,6 @@ interface FileRowProps {
 }
 
 function FileRow({ file, onRemove }: FileRowProps) {
-  const digest = useFileDigest(file.id)
-  const status: StatusMarkStatus =
-    !digest || digest.status === 'pending' ? 'running' : digest.status === 'ready' ? 'done' : 'failed'
-
   return (
     <motion.li
       initial={{ opacity: 0, height: 0 }}
@@ -37,7 +32,6 @@ function FileRow({ file, onRemove }: FileRowProps) {
         <span className="shrink-0 text-xs tabular-nums text-zinc-400">
           {formatBytes(file.file.size)}
         </span>
-        <StatusMark status={status} size={16} />
         <GhostButton
           iconOnly
           className="-mr-1.5"
@@ -46,11 +40,6 @@ function FileRow({ file, onRemove }: FileRowProps) {
           icon={<FiX className="size-4" />}
         />
       </div>
-      {digest?.status === 'error' && (
-        <p className="px-3.5 pb-2.5 text-xs text-red-400">
-          Не удалось обработать файл. Уберите его и добавьте снова.
-        </p>
-      )}
     </motion.li>
   )
 }

@@ -1,0 +1,158 @@
+# Local stack: Postgres + Redis + MinIO + the Go backend.
+# Run from the repo root:
+#
+#   docker compose up -d --build
+#
+# The one-shot `migrate` service runs goose before the API starts. The React
+# frontend runs on the host (`npm run dev`) and proxies /api to :8000.
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: hypersharing-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123qwe}
+      POSTGRES_DB: ${POSTGRES_DB:-dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: hypersharing-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: hypersharing-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-123qwe123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the S3 bucket the app expects (there is no auto-create on
+  # startup — the health check only does head_bucket).
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: hypersharing-minio-init
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-123qwe123}
+      S3_BUCKET: ${S3_BUCKET:-hypersharing}
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$S3_BUCKET
+      "
+
+  # One-shot: applies goose migrations before the API starts.
+  migrate:
+    build:
+      context: ./backend
+    image: hypersharing-backend
+    container_name: hypersharing-migrate
+    restart: "no"
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["goose"]
+    command: ["-dir", "/migrations", "postgres", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-123qwe}@postgres:5432/${POSTGRES_DB:-dev}", "up"]
+
+  app:
+    build:
+      context: ./backend
+    image: hypersharing-backend
+    container_name: hypersharing-app
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: 0.0.0.0:8000
+      TUS_HTTP_ADDR: 0.0.0.0:8081
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-123qwe}@postgres:5432/${POSTGRES_DB:-dev}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      # URLs, подписанные для клиента, должны быть доступны с хоста, а не из сети compose.
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-123qwe123}
+      S3_BUCKET: ${S3_BUCKET:-hypersharing}
+      # В dev фронтенд (vite) сидит на другом origin — разрешаем его для CSRF-check.
+      ALLOWED_ORIGINS: http://localhost:5173
+      # Dev без HTTPS: иначе session-cookie не будет отправляться браузером по HTTP.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "8000:8000"
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Фоновая очистка: просроченные анонимные посты, брошенные tus-загрузки,
+  # сиротские объекты в MinIO.
+  worker:
+    build:
+      context: ./backend
+    image: hypersharing-backend
+    container_name: hypersharing-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-123qwe}@postgres:5432/${POSTGRES_DB:-dev}
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-123qwe123}
+      S3_BUCKET: ${S3_BUCKET:-hypersharing}
+      WORKER_INTERVAL: ${WORKER_INTERVAL:-10m}
+    entrypoint: ["hypersharing-worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  minio_data:

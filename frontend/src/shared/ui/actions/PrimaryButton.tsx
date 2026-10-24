@@ -34,6 +34,7 @@ interface PrimaryButtonProps {
   className?: string
   shine?: boolean
   size?: 'default' | 'sm'
+  disabled?: boolean
 }
 
 export default function PrimaryButton({
@@ -47,6 +48,7 @@ export default function PrimaryButton({
   className = '',
   shine = false,
   size = 'default',
+  disabled = false,
 }: PrimaryButtonProps) {
   const cls = [
     'relative inline-flex items-center gap-2 overflow-hidden rounded-lg bg-zinc-100 px-5 text-sm font-medium text-zinc-950',
@@ -93,6 +95,7 @@ export default function PrimaryButton({
         onClick?.()
       }}
       className={cls}
+      disabled={disabled}
     >
       {content}
     </button>

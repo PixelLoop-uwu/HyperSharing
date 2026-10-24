@@ -7,15 +7,18 @@ type AuthStatus = 'loading' | 'authenticated' | 'anonymous'
 interface AuthState {
   user: UserRead | null
   status: AuthStatus
+  avatarVersion: number
   load: () => Promise<void>
   login: (input: LoginIn) => Promise<void>
   register: (input: RegisterIn) => Promise<void>
   logout: () => Promise<void>
+  bumpAvatarVersion: () => void
 }
 
 export const useAuth = create<AuthState>()((set) => ({
   user: null,
   status: 'loading',
+  avatarVersion: 0,
   load: async () => {
     try {
       const user = await fetchMe()
@@ -36,4 +39,5 @@ export const useAuth = create<AuthState>()((set) => ({
     await logout()
     set({ user: null, status: 'anonymous' })
   },
+  bumpAvatarVersion: () => set((s) => ({ avatarVersion: s.avatarVersion + 1 })),
 }))

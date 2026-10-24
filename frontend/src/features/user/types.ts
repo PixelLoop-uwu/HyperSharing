@@ -3,6 +3,10 @@ export interface UserRead {
   email: string
   username: string
   created_at: string
+  email_verified: boolean
+  is_admin: boolean
+  /** Version of the user's avatar; `null`/absent = no avatar. Not yet in `/auth/me`. */
+  avatar_version?: string | null
 }
 
 export interface RegisterIn {

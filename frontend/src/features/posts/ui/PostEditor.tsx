@@ -3,15 +3,16 @@ import { useEffect, useRef } from 'react'
 import { useFileDragActive } from '@/shared/lib/fileDrag'
 import { rise, stagger } from '@/shared/lib/motion'
 import StatusMark from '@/shared/ui/feedback/StatusMark'
-import { initPostEditor, useDraftStore, usePublishStore } from '../model'
-import type { PostFullRead } from '../types'
+import { initPostEditor } from '../persist'
+import { useDraftStore, usePublishStore } from '../store'
+import type { PostRead } from '../types'
 import NewSectionZone from './NewSectionZone'
 import PublishPanel from './PublishPanel'
 import SectionCard from './SectionCard'
 
 interface PostEditorProps {
   /** Called with the created post after a successful publish. */
-  onPublished: (post: PostFullRead) => void
+  onPublished: (post: PostRead) => void
 }
 
 export default function PostEditor({ onPublished }: PostEditorProps) {

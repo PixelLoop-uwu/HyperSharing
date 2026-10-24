@@ -1,52 +1,44 @@
-# Development commands for Hypersharing.
-# FastAPI backend (uv) + Vite frontend (npm). Shared infra runs in Docker.
-# Run `just --list` to see all recipes.
-
-# --- Infrastructure (Postgres + Redis + MinIO) ---
+set dotenv-load
 
 # Start the shared infrastructure only.
 infra:
-    docker compose up -d postgres redis minio minio-init
-
-# Stop the shared infrastructure.
-stop:
-    docker compose down
-
-# --- Backend ---
+  docker compose up -d --wait postgres redis minio
+  docker compose up -d minio-init
 
 # Apply database migrations.
 migrate:
-    cd backend && uv run alembic upgrade head
+  cd backend && goose -dir migrations postgres "$DATABASE_URL" up
+
+# Create the next migration: just migrate-new create_posts
+migrate-new name:
+  cd backend && goose -dir migrations -s create {{name}} sql
 
 # Run the backend API with hot reload (starts infra + migrates first).
 backend: infra migrate
-    cd backend && uv run uvicorn app.main:app --reload
+  cd backend && air --build.cmd "go build -o ./tmp/app ./cmd/app" --build.bin "./tmp/app"
 
-# --- Frontend ---
+# Run the cleanup worker (infra + migrations first).
+worker: infra migrate
+  cd backend && go run ./cmd/worker
 
-# Run the frontend dev server (Vite HMR, proxies /api → :8000).
-frontend:
-    cd frontend && npm run dev
+# Unit tests (fast, no Docker).
+test:
+  cd backend && go test ./...
 
-# --- Everything ---
+# Integration tests (real Postgres/MinIO via testcontainers — needs Docker).
+test-integration:
+  cd backend && go test -tags=integration ./...
 
 # Run backend + frontend together (dev). Ctrl+C stops both.
 dev:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    docker compose up -d postgres redis minio minio-init
-    (cd backend && uv run alembic upgrade head)
-    (cd backend && uv run uvicorn app.main:app --reload) &
-    BACKEND_PID=$!
-    (cd frontend && npm run dev) &
-    FRONTEND_PID=$!
-    trap 'kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true' EXIT INT TERM
-    wait "$BACKEND_PID" "$FRONTEND_PID"
-
-# Run the full containerized stack (backend + worker in Docker). Frontend stays dev-only.
-up:
-    docker compose up -d --build
-
-# Follow logs of the containerized backend.
-logs:
-    docker compose logs -f app worker
+  #!/usr/bin/env bash
+  set -euo pipefail
+  docker compose up -d --wait postgres redis minio
+  docker compose up -d minio-init
+  (cd backend && goose -dir migrations postgres "$DATABASE_URL" up)
+  (cd backend && air --build.cmd "go build -o ./tmp/app ./cmd/app" --build.bin "./tmp/app") &
+  BACKEND_PID=$!
+  (cd frontend && npm run dev) &
+  FRONTEND_PID=$!
+  trap 'kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true' EXIT INT TERM
+  wait "$BACKEND_PID" "$FRONTEND_PID"

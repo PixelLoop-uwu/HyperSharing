@@ -1,77 +1,162 @@
-import { sha256Hex } from '@/shared/lib/hash'
-import type { FileUploadOut, PartEtagIn } from './types'
+import type {
+  DraftSectionIn,
+  FileRef,
+  FileTarget,
+  PostDraftCreate,
+  Section,
+} from './types'
 
-/**
- * Upload chunk size in bytes. Must match the backend's
- * ``settings.s3_multipart_part_size``: the client hashes each part *before*
- * ``POST /posts/draft``, so the size is pinned here rather than read from the
- * API. The server echoes the same value back as ``FileUploadOut.part_size``.
- */
-export const PART_SIZE = 8 * 1024 * 1024
+const TUS_VERSION = '1.0.0'
+const CHUNK_SIZE = 8 * 1024 * 1024
 
-export interface FileDigest {
-  hash: string
-  size: number
-  content_type: string | null
-  part_checksums: string[]
+// --- Pure operations on the section list. No state, no side effects. ---
+
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max)
+
+export const makeSection = (text = '', files: FileRef[] = []): Section => ({
+  id: crypto.randomUUID(),
+  text,
+  files,
+})
+
+export const makeRefs = (files: File[]): FileRef[] =>
+  files.map((file) => ({ id: crypto.randomUUID(), file }))
+
+/** A section with no text and no files carries nothing; it is skipped on publish. */
+export const isBlank = (s: Section): boolean => s.text.trim() === '' && s.files.length === 0
+
+export function insertSection(
+  sections: Section[],
+  section: Section,
+  at = sections.length,
+): Section[] {
+  const index = clamp(at, 0, sections.length)
+  return [...sections.slice(0, index), section, ...sections.slice(index)]
 }
 
-/**
- * Compute the whole-file SHA-256 plus one SHA-256 per part (in part order).
- * Reads the file once into memory — fine for the per-file size ceiling.
- */
-export async function computeFileDigest(file: File): Promise<FileDigest> {
-  const buffer = await file.arrayBuffer()
-  const hash = await sha256Hex(buffer)
-  const partCount = Math.ceil(file.size / PART_SIZE)
-  const part_checksums: string[] = []
-  for (let i = 0; i < partCount; i++) {
-    const start = i * PART_SIZE
-    const end = Math.min(file.size, start + PART_SIZE)
-    part_checksums.push(await sha256Hex(buffer.slice(start, end)))
-  }
-  return {
-    hash,
-    size: file.size,
-    content_type: file.type || null,
-    part_checksums,
-  }
+export function moveSection(sections: Section[], from: number, to: number): Section[] {
+  if (from === to || from < 0 || from >= sections.length) return sections
+  const next = sections.slice()
+  const [item] = next.splice(from, 1)
+  if (!item) return sections
+  next.splice(clamp(to, 0, next.length), 0, item)
+  return next
 }
 
-/** PUT one part straight to S3; returns the quoted ETag to hand back on publish. */
-async function uploadPart(url: string, checksum_sha256: string, body: Blob): Promise<string> {
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'x-amz-checksum-sha256': checksum_sha256,
-      'x-amz-sdk-checksum-algorithm': 'SHA256',
-    },
-    body,
+export const setText = (sections: Section[], id: string, text: string): Section[] =>
+  sections.map((s) => (s.id === id ? { ...s, text } : s))
+
+export const removeSection = (sections: Section[], id: string): Section[] =>
+  sections.filter((s) => s.id !== id)
+
+/**
+ * Drop onto a section appends to it; drop onto the "new section" zone creates one
+ * holding all the dropped files. An unknown sectionId falls back to a new section at the end.
+ */
+export function addFiles(sections: Section[], refs: FileRef[], target: FileTarget): Section[] {
+  if (refs.length === 0) return sections
+  if ('sectionId' in target && sections.some((s) => s.id === target.sectionId)) {
+    return sections.map((s) =>
+      s.id === target.sectionId ? { ...s, files: [...s.files, ...refs] } : s,
+    )
+  }
+  const at = 'newAt' in target ? target.newAt : sections.length
+  return insertSection(sections, makeSection('', refs), at)
+}
+
+/** Removing the last file of a section with no text removes the section too. */
+export function removeFile(sections: Section[], sectionId: string, fileId: string): Section[] {
+  return sections.flatMap((s) => {
+    if (s.id !== sectionId) return [s]
+    const next = { ...s, files: s.files.filter((f) => f.id !== fileId) }
+    return isBlank(next) ? [] : [next]
   })
-  if (!res.ok) {
-    throw new Error(`загрузка части не удалась (${res.status})`)
+}
+
+// --- Draft payload ---
+
+export interface BuiltDraft {
+  payload: PostDraftCreate
+  /** Files in declaration order, for the tus upload right after the draft is created. */
+  files: File[]
+}
+
+/** Turns the editor state into the POST /drafts body, keeping the files in order. */
+export function buildDraft(title: string, sections: Section[]): BuiltDraft {
+  const nonBlank = sections.filter((s) => !isBlank(s))
+  const out: DraftSectionIn[] = []
+  const files: File[] = []
+  for (const s of nonBlank) {
+    out.push({
+      body: s.text.trim(),
+      files: s.files.map(({ file }) => ({
+        name: file.name,
+        mime: file.type || 'application/octet-stream',
+        size: file.size,
+      })),
+    })
+    for (const { file } of s.files) files.push(file)
   }
-  const etag = res.headers.get('ETag')
-  if (!etag) throw new Error('S3 не вернул ETag в ответе загрузки')
-  return etag
+  return { payload: { title: title.trim(), sections: out }, files }
+}
+
+// --- tus upload ---
+
+export interface TusMeta {
+  draftId: string
+  fileId: string
+}
+
+/** base64 for Upload-Metadata values (tus requires base64-encoded values). */
+function b64(value: string): string {
+  return btoa(value)
 }
 
 /**
- * Upload every part of ``file`` for a presigned ``upload`` and collect ETags.
- * ``onProgress`` fires after each part completes with (done, total) for the file.
+ * Uploads `file` through the tus endpoint (`POST /uploads`, then PATCH chunks).
+ * The upload id is the file's slot id, so no ETag/checksum bookkeeping is needed:
+ * the backend already ties every byte to the declared slot.
  */
-export async function uploadFileParts(
+export async function uploadFileViaTus(
   file: File,
-  upload: FileUploadOut,
-  onProgress?: (doneParts: number, totalParts: number) => void,
-): Promise<PartEtagIn[]> {
-  const parts: PartEtagIn[] = []
-  for (const part of upload.parts) {
-    const start = (part.part_number - 1) * upload.part_size
-    const end = Math.min(file.size, start + upload.part_size)
-    const etag = await uploadPart(part.url, part.checksum_sha256, file.slice(start, end))
-    parts.push({ part_number: part.part_number, etag })
-    onProgress?.(parts.length, upload.parts.length)
+  meta: TusMeta,
+  onProgress?: (uploaded: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const createRes = await fetch('/api/v1/uploads', {
+    method: 'POST',
+    headers: {
+      'Tus-Resumable': TUS_VERSION,
+      'Upload-Length': String(file.size),
+      'Upload-Metadata': `draftId ${b64(meta.draftId)},fileId ${b64(meta.fileId)}`,
+    },
+    credentials: 'same-origin',
+    signal,
+  })
+  if (!createRes.ok) {
+    throw new Error(`не удалось начать загрузку «${file.name}» (${createRes.status})`)
   }
-  return parts
+  const location = createRes.headers.get('Location')
+  if (!location) throw new Error('сервер не вернул адрес загрузки')
+
+  let offset = 0
+  while (offset < file.size) {
+    const end = Math.min(file.size, offset + CHUNK_SIZE)
+    const res = await fetch(location, {
+      method: 'PATCH',
+      headers: {
+        'Tus-Resumable': TUS_VERSION,
+        'Upload-Offset': String(offset),
+        'Content-Type': 'application/offset+octet-stream',
+      },
+      credentials: 'same-origin',
+      body: file.slice(offset, end),
+      signal,
+    })
+    if (res.status !== 204) {
+      throw new Error(`загрузка «${file.name}» не удалась (${res.status})`)
+    }
+    offset = end
+    onProgress?.(offset, file.size)
+  }
 }

@@ -1,88 +1,111 @@
-// Wire-format DTOs for the post API, kept snake_case to match the backend
-// payloads directly (same convention as ``features/auth/types.ts``).
+// Wire DTOs (snake_case, matching the Go backend) + the editor's domain models.
+// Kept in one file to mirror `features/user/types.ts`.
 
-export interface ParagraphItemIn {
-  kind: 'paragraph'
+// --- Editor domain models ---
+
+/** A file in the draft. The id keys its IndexedDB blob. */
+export interface FileRef {
+  id: string
+  file: File
+}
+
+/** One unit of the post: optional text plus any number of files. */
+export interface Section {
+  id: string
   text: string
+  files: FileRef[]
 }
 
-export interface FileItemIn {
-  kind: 'file'
-  hash: string
+export interface DraftData {
+  title: string
+  sections: Section[]
+}
+
+/** Where dropped files go: into an existing section, or into a new one at an index. */
+export type FileTarget = { sectionId: string } | { newAt: number }
+
+// --- Draft creation (POST /drafts) ---
+
+export interface DraftFileIn {
+  name: string
+  mime: string
   size: number
-  content_type: string | null
-  filename: string | null
-  part_checksums: string[]
 }
 
-export type PostItemIn = ParagraphItemIn | FileItemIn
+export interface DraftSectionIn {
+  body: string
+  files: DraftFileIn[]
+}
 
 export interface PostDraftCreate {
-  title: string | null
-  items: PostItemIn[]
+  title: string
+  sections: DraftSectionIn[]
 }
 
-export interface PartPresignOut {
-  part_number: number
-  url: string
-  checksum_sha256: string
+/** Response of POST /drafts: slot ids for each declared section/file. */
+export interface DraftFileRead {
+  id: string
 }
 
-export interface FileUploadOut {
-  hash: string
-  part_size: number
-  parts: PartPresignOut[]
+export interface DraftSectionRead {
+  id: string
+  files: DraftFileRead[]
 }
 
 export interface PostDraftRead {
-  draft_id: string
-  expires_at: string
-  files: FileUploadOut[]
+  id: string
+  sections: DraftSectionRead[]
 }
 
-export interface PartEtagIn {
-  part_number: number
-  etag: string
-}
+// --- Published post (GET /posts/{id}, POST /drafts/{id}/publish) ---
 
-export interface FileCompleteIn {
-  hash: string
-  parts: PartEtagIn[]
-}
-
-export interface PostPublishIn {
-  draft_id: string
-  files: FileCompleteIn[]
-}
-
-export interface ParagraphItemOut {
-  kind: 'paragraph'
-  text: string
-}
-
-export interface FileItemOut {
-  kind: 'file'
-  hash: string
+export interface FileRead {
+  name: string
+  mime: string
   size: number
-  content_type: string | null
-  filename: string | null
   url: string
 }
 
-export type PostItemOut = ParagraphItemOut | FileItemOut
+export interface SectionRead {
+  body: string
+  files: FileRead[]
+}
 
-export interface PostFullRead {
-  id: string
-  title: string | null
-  user_id: string | null
-  items: PostItemOut[]
-  created_at: string
+export interface AuthorRead {
+  username: string
+  avatar_url: string | null
 }
 
 export interface PostRead {
   id: string
-  title: string | null
-  user_id: string | null
+  title: string
+  author: AuthorRead | null
   created_at: string
-  updated_at: string
+  sections: SectionRead[]
+}
+
+// --- My posts list (GET /me/posts) ---
+
+export interface PostListItem {
+  id: string
+  title: string
+  total_size: number
+  created_at: string
+}
+
+export interface PostListRead {
+  posts: PostListItem[]
+  next_cursor: string | null
+}
+
+// --- Quota (GET /me/quota) ---
+
+export interface QuotaMetric {
+  used: number
+  limit: number
+}
+
+export interface QuotaRead {
+  storage: QuotaMetric
+  daily: QuotaMetric
 }

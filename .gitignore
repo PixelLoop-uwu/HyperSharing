@@ -13,6 +13,7 @@ node_modules
 dist
 dist-ssr
 *.local
+tmp
 
 # --- Python (backed) ---
 
@@ -22,6 +23,7 @@ __pycache__/
 *.egg-info/
 .eggs/
 build/
+backend-py
 
 .venv/
 venv/

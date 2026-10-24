@@ -6,7 +6,8 @@ import { useFilePicker } from '@/shared/lib/useFilePicker'
 import AutoTextarea from '@/shared/ui/AutoTextarea'
 import Card from '@/shared/ui/layout/Card'
 import GhostButton from '@/shared/ui/actions/GhostButton'
-import { useDraftStore, type Section } from '../model'
+import { useDraftStore } from '../store'
+import type { Section } from '../types'
 import FileRow from './FileRow'
 
 interface SectionCardProps {

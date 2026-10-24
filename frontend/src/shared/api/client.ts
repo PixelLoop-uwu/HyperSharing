@@ -9,11 +9,11 @@ export const api = axios.create({
 
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ error?: { code: string; detail: string } }>) => {
+  (error: AxiosError<{ error?: { code: string; message: string } }>) => {
     const body = error.response?.data
     if (body?.error) {
       return Promise.reject(
-        new ApiError(error.response?.status ?? 0, body.error.code, body.error.detail),
+        new ApiError(error.response?.status ?? 0, body.error.code, body.error.message),
       )
     }
     return Promise.reject(error)

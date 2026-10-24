@@ -1,28 +1,29 @@
 import { api } from '@/shared/api/client'
-import type {
-  PostDraftCreate,
-  PostDraftRead,
-  PostFullRead,
-  PostPublishIn,
-  PostRead,
-} from './types'
+import type { PostDraftCreate, PostDraftRead, PostListRead, PostRead, QuotaRead } from './types'
 
 export async function createDraft(data: PostDraftCreate): Promise<PostDraftRead> {
-  const { data: draft } = await api.post<PostDraftRead>('/posts/draft', data)
+  const { data: draft } = await api.post<PostDraftRead>('/drafts', data)
   return draft
 }
 
-export async function publishPost(data: PostPublishIn): Promise<PostFullRead> {
-  const { data: post } = await api.post<PostFullRead>('/posts/publish', data)
+export async function publishDraft(draftId: string): Promise<PostRead> {
+  const { data: post } = await api.post<PostRead>(`/drafts/${draftId}/publish`)
   return post
 }
 
-export async function getPost(id: string): Promise<PostFullRead> {
-  const { data } = await api.get<PostFullRead>(`/posts/${id}`)
+export async function getPost(id: string): Promise<PostRead> {
+  const { data } = await api.get<PostRead>(`/posts/${id}`)
   return data
 }
 
-export async function listPosts(offset = 0, limit = 100): Promise<PostRead[]> {
-  const { data } = await api.get<PostRead[]>('/posts', { params: { offset, limit } })
+/** Cursor-paginated list of the signed-in user's posts. `cursor` is the previous page's `next_cursor`. */
+export async function listMyPosts(cursor?: string, limit = 20): Promise<PostListRead> {
+  const { data } = await api.get<PostListRead>('/me/posts', { params: { cursor, limit } })
+  return data
+}
+
+/** Current storage + daily upload quota for the signed-in user (approximate). */
+export async function getMyQuota(): Promise<QuotaRead> {
+  const { data } = await api.get<QuotaRead>('/me/quota')
   return data
 }

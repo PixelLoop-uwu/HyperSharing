@@ -3,7 +3,7 @@ import { useFileDropZone } from '@/shared/lib/fileDrag'
 import { useFilePicker } from '@/shared/lib/useFilePicker'
 import GhostButton from '@/shared/ui/actions/GhostButton'
 import PrimaryButton from '@/shared/ui/actions/PrimaryButton'
-import { useDraftStore } from '../model'
+import { useDraftStore } from '../store'
 
 interface NewSectionZoneProps {
   /** No sections yet: show the larger first-run invitation. */

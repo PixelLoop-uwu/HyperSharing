@@ -12,11 +12,11 @@ import StatusMark from '@/shared/ui/feedback/StatusMark'
 function BackLink() {
   return (
     <Link
-      to="/posts"
+      to="/"
       className="inline-flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zinc-400"
     >
       <FiArrowLeft aria-hidden="true" className="size-4" />
-      Все посты
+      На главную
     </Link>
   )
 }

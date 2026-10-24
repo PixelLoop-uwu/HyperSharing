@@ -19,3 +19,14 @@ export async function register(input: RegisterIn): Promise<UserRead> {
 export async function logout(): Promise<void> {
   await api.post('/auth/logout')
 }
+
+/** Upload a raw image (png/jpeg/webp) as the user's avatar. Replaces the previous one. */
+export async function uploadAvatar(file: File): Promise<void> {
+  await api.put('/me/avatar', file, {
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+  })
+}
+
+export async function deleteAvatar(): Promise<void> {
+  await api.delete('/me/avatar')
+}
