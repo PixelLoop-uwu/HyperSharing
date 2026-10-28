@@ -7,4 +7,6 @@
 <p align="center">
   <img src="./preview/landing.png" width="48%" alt="Post preview">
   <img src="./preview/post.png" width="48%" alt="Profile preview">
+  <img src="./preview/post2.png" width="48%" alt="Profile preview">
+  <img src="./preview/profile.png" width="48%" alt="Profile preview">
 </p>
