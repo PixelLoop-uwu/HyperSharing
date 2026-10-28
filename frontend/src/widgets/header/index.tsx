@@ -1,14 +1,15 @@
-import { useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { FiMenu, FiX } from 'react-icons/fi'
+
+import { motion } from 'framer-motion'
+import { useMe } from '@/features/user'
 import Card from '@/shared/ui/layout/Card'
 import Logo from '@/shared/ui/content/Logo'
 import DesktopNav from './DesktopNav'
-import MobileNav from './MobileNav'
+import MobileMenu from './MobileMenu'
 
 export default function Header() {
-  const [isOpen, setIsOpen] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement>(null)
+  const me = useMe()
+  const loading = me.isLoading
+  const user = me.data ?? null
 
   return (
     <motion.header
@@ -20,49 +21,11 @@ export default function Header() {
       <Card variant="glass" className="mx-auto max-w-7xl">
         <div className="flex h-(--header-h) items-center justify-between px-6">
           <Logo />
-          <DesktopNav />
 
-          <button
-            ref={buttonRef}
-            type="button"
-            onClick={() => setIsOpen((prev) => !prev)}
-            className="md:hidden relative size-6 text-zinc-400 hover:text-zinc-100 transition-colors"
-            aria-label="Открыть меню"
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              {isOpen ? (
-                <motion.div
-                  key="close"
-                  initial={{ rotate: -90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: 90, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <FiX className="size-6" />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="menu"
-                  initial={{ rotate: 90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: -90, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <FiMenu className="size-6" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </button>
+          <DesktopNav loading={loading} user={user} />
+          <MobileMenu loading={loading} user={user} />
         </div>
       </Card>
-
-      <MobileNav
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-        toggleButtonRef={buttonRef}
-      />
     </motion.header>
   )
 }

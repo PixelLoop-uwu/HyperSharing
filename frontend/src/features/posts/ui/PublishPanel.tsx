@@ -6,8 +6,9 @@ import Card from '@/shared/ui/layout/Card'
 import GhostButton from '@/shared/ui/actions/GhostButton'
 import PrimaryButton from '@/shared/ui/actions/PrimaryButton'
 import StatusMark from '@/shared/ui/feedback/StatusMark'
-import { isBlank } from '../lib'
-import { useDraftStore, usePublishStore } from '../store'
+import { isBlank } from '../lib/sections'
+import { useDraftStore } from '../models/useDraftStore'
+import { usePublishStore } from '../models/usePublishStore'
 
 function Row({ label, value }: { label: string; value: string | number }) {
   return (

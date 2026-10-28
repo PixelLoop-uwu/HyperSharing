@@ -1,9 +1,9 @@
 import { FiCalendar, FiTrash2, FiUpload } from 'react-icons/fi'
-import QuotaSection from '@/features/posts/ui/QuotaSection'
-import Avatar from '@/shared/ui/content/Avatar'
+import { QuotaSection } from '@/features/posts'
+import Avatar from './Avatar'
 import Card from '@/shared/ui/layout/Card'
-import { useAvatarEditor } from '../hooks/useAvatarEditor'
-import type { UserRead } from '../types'
+import { useAvatarEditor } from '../model/useAvatarEditor'
+import type { UserRead } from '../model/types'
 
 export default function ProfileSidebar({ user }: { user: UserRead }) {
   const editor = useAvatarEditor()
@@ -18,12 +18,9 @@ export default function ProfileSidebar({ user }: { user: UserRead }) {
     <Card variant="solid" className="p-4">
       <div className="relative">
         <Avatar
-          key={editor.avatarVersion}
           userId={user.id}
           username={user.username}
-          version={editor.avatarVersion}
-          onLoaded={editor.onAvatarLoaded}
-          onMissing={editor.onAvatarMissing}
+          version={user.avatar_version}
           className="aspect-square w-full rounded-full"
         />
         <div className="absolute bottom-3 right-3 flex items-center overflow-hidden bg-zinc-700/80 backdrop-blur-xl rounded-lg border border-zinc-500/50">

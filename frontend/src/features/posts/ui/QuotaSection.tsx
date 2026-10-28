@@ -1,5 +1,5 @@
 import Skeleton from '@/shared/ui/feedback/Skeleton'
-import { useQuota } from '../hooks/useQuota'
+import { useQuota } from '../models/useQuota'
 import QuotaBar from './QuotaBar'
 
 export default function QuotaSection() {

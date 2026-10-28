@@ -36,7 +36,7 @@ export default function Typewriter({
       {!done && (
         <motion.span
           aria-hidden="true"
-          className="ml-1 inline-block h-[0.9em] w-[0.5em] translate-y-[0.1em] bg-paper/80"
+          className="ml-1 inline-block h-[0.9em] w-[0.5em] translate-y-[0.1em] bg-zinc-200/80"
           animate={{ opacity: [1, 0, 1] }}
           transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
         />

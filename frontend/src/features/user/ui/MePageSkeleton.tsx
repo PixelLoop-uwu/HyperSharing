@@ -1,5 +1,6 @@
 import Skeleton from '@/shared/ui/feedback/Skeleton'
 
+
 export default function MePageSkeleton() {
   return (
     <div className="mx-auto w-full max-w-5xl py-10" aria-busy="true">

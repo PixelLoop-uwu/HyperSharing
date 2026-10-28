@@ -4,7 +4,7 @@ import { FiX } from 'react-icons/fi'
 import { formatBytes } from '@/shared/lib/format'
 import FileTypeIcon from '@/shared/ui/content/FileTypeIcon'
 import GhostButton from '@/shared/ui/actions/GhostButton'
-import type { FileRef } from '../types'
+import type { FileRef } from '../models/types'
 
 interface FileRowProps {
   file: FileRef

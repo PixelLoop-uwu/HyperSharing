@@ -1,45 +1,44 @@
 import { useState } from 'react'
 import { FiLogOut } from 'react-icons/fi'
 import { Link } from 'react-router-dom'
-import Avatar from '@/shared/ui/content/Avatar'
-import { useAuth } from '../store'
-
-// Tailwind ищет классы по литералам, поэтому строка написана целиком, без сборки из частей
-const NICK_FADE =
-  'group-hover:[mask-image:linear-gradient(to_left,transparent_1rem,#000_2rem)] group-has-[:focus-visible]:[mask-image:linear-gradient(to_left,transparent_1rem,#000_2rem)]'
+import Avatar from './Avatar'
+import { useLogout, useMe } from '../model/hooks'
 
 export default function UserMenu() {
-  const user = useAuth((s) => s.user)
-  const avatarVersion = useAuth((s) => s.avatarVersion)
-  const logout = useAuth((s) => s.logout)
+  const user = useMe().data
+  const logout = useLogout()
   const [pending, setPending] = useState(false)
 
   if (!user) return null
 
   async function handleLogout() {
     if (pending) return
+
     setPending(true)
     try {
-      await logout()
+      await logout.mutateAsync()
     } finally {
       setPending(false)
     }
   }
 
   return (
-    <div className="group relative flex items-center">
+    <div className="flex min-w-0 items-center">
       <Link
         to="/me"
-        className="flex min-w-0 items-center gap-2 rounded-md transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+        className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-zinc-300 transition-colors hover:bg-white/5 hover:text-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
       >
         <Avatar
           userId={user.id}
+          version={user.avatar_version}
           username={user.username}
-          version={avatarVersion}
-          className="size-7 rounded-full"
+          className="size-7 shrink-0 rounded-full"
           fallbackClassName="text-xs"
         />
-        <span className={`max-w-[10rem] truncate ${NICK_FADE}`}>{user.username}</span>
+
+        <span className="max-w-40 truncate text-sm">
+          {user.username}
+        </span>
       </Link>
 
       <button
@@ -48,9 +47,12 @@ export default function UserMenu() {
         title="Выйти"
         disabled={pending}
         onClick={() => void handleLogout()}
-        className="absolute inset-y-0 right-0 grid place-items-center rounded-md px-1.5 text-zinc-400 opacity-0 transition hover:text-zinc-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 disabled:cursor-wait [@media(hover:none)]:static [@media(hover:none)]:opacity-100"
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:cursor-wait disabled:opacity-50"
       >
-        <FiLogOut aria-hidden="true" className={`size-4 ${pending ? 'animate-pulse' : ''}`} />
+        <FiLogOut
+          aria-hidden="true"
+          className={`size-4 ${pending ? 'animate-pulse' : ''}`}
+        />
       </button>
     </div>
   )

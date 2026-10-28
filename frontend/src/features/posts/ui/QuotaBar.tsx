@@ -1,5 +1,5 @@
 import { formatBytes } from '@/shared/lib/format'
-import type { QuotaMetric } from '../types'
+import type { QuotaMetric } from '../models/types'
 
 export default function QuotaBar({ label, metric }: { label: string; metric: QuotaMetric }) {
   const pct = metric.limit > 0 ? Math.min(100, (metric.used / metric.limit) * 100) : 0

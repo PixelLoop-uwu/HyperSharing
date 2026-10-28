@@ -13,13 +13,20 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // tus-загрузки живут на отдельном порту backend (TUS_HTTP_ADDR), чтобы
-      // долгие PATCH не делили таймауты с JSON-эндпоинтами.
       '/api/v1/uploads': {
         target: 'http://localhost:8081',
         changeOrigin: true,
       },
-      // Cookie сессия живёт на origin фронта — проксируем, чтобы не настраивать CORS.
+      '^/f(?:/|$)': {
+        target: 'http://localhost:8800',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/f/, '/api/v1/f'),
+      },
+      '^/avatars(?:/|$)': {
+        target: 'http://localhost:8800',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/avatars/, '/api/v1/avatars'),
+      },
       '/api': {
         target: 'http://localhost:8800',
         changeOrigin: true,

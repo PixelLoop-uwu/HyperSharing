@@ -1,11 +1,12 @@
-import { motion } from 'framer-motion'
+import { MotionConfig, motion } from 'framer-motion'
 import { FiDownload } from 'react-icons/fi'
 import { formatBytes, formatDate } from '@/shared/lib/format'
+import { rise, stagger } from '@/shared/lib/motion'
 import Card from '@/shared/ui/layout/Card'
 import CopyButton from '@/shared/ui/actions/CopyButton'
 import FileTypeIcon from '@/shared/ui/content/FileTypeIcon'
 import Markdown from '@/shared/ui/content/Markdown'
-import type { FileRead, PostRead, SectionRead } from '../types'
+import type { FileRead, PostRead, SectionRead } from '../models/types'
 
 type MediaKind = 'image' | 'video' | 'audio'
 
@@ -92,39 +93,41 @@ function SectionView({ section }: { section: SectionRead }) {
 
 export default function PostView({ post }: { post: PostRead }) {
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className="space-y-10"
-    >
-      <header className="space-y-3">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
-          {post.title || 'Без названия'}
-        </h1>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <div className="flex items-center gap-2">
-            {post.author?.avatar_url && (
-              <img
-                src={post.author.avatar_url}
-                alt=""
-                className="size-6 shrink-0 rounded-full bg-zinc-800 object-cover"
-              />
-            )}
-            <p className="text-sm text-zinc-400">
-              {post.author ? `${post.author.username} · ` : ''}
-              {formatDate(post.created_at)}
-            </p>
+    <MotionConfig reducedMotion="user">
+      <motion.article
+        variants={stagger}
+        initial="hidden"
+        animate="show"
+        className="space-y-10"
+      >
+        <motion.header variants={rise} className="space-y-3">
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
+            {post.title || 'Без названия'}
+          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <div className="flex items-center gap-2">
+              {post.author?.avatar_url && (
+                <img
+                  src={post.author.avatar_url}
+                  alt=""
+                  className="size-6 shrink-0 rounded-full bg-zinc-800 object-cover"
+                />
+              )}
+              <p className="text-sm text-zinc-400">
+                {post.author ? `${post.author.username} · ` : ''}
+                {formatDate(post.created_at)}
+              </p>
+            </div>
+            <CopyButton text={() => window.location.href} />
           </div>
-          <CopyButton text={() => window.location.href} />
-        </div>
-      </header>
+        </motion.header>
 
-      <div className="space-y-10">
-        {post.sections.map((section, i) => (
-          <SectionView key={i} section={section} />
-        ))}
-      </div>
-    </motion.article>
+        <motion.div variants={rise} className="space-y-10">
+          {post.sections.map((section, i) => (
+            <SectionView key={i} section={section} />
+          ))}
+        </motion.div>
+      </motion.article>
+    </MotionConfig>
   )
 }

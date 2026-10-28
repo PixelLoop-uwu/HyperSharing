@@ -7,11 +7,9 @@ interface AuthShellProps {
   title: string
   lead: string
   children: ReactNode
-  /** Line under the card, usually a link to the sibling page. */
   footer: ReactNode
 }
 
-/** Shared frame for login and registration: a centered card that rises in, fields staggered. */
 export default function AuthShell({ title, lead, children, footer }: AuthShellProps) {
   return (
     <MotionConfig reducedMotion="user">

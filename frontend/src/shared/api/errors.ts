@@ -10,3 +10,9 @@ export class ApiError extends Error {
     this.code = code
   }
 }
+
+export function getStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined
+  const e = error as { status?: number; response?: { status?: number } }
+  return e.status ?? e.response?.status
+}

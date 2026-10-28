@@ -1,14 +1,14 @@
 import { createBrowserRouter } from 'react-router-dom'
 import Layout from '@/app/Layout'
-import UserOnly from '@/app/UserOnly'
-import MePageSkeleton from '@/features/user/ui/MePageSkeleton'
+import UserOnly from '@/app/providers/UserOnly'
+import { MePageSkeleton } from '@/features/user'
 import LandingPage from '@/pages/LandingPage'
-import LoginPage from '@/pages/LoginPage'
-import MePage from '@/pages/MePage'
-import NewPostPage from '@/pages/NewPostPage'
+import LoginPage from '@/pages/user/LoginPage'
+import MePage from '@/pages/user/MePage'
+import NewPostPage from '@/pages/posts/NewPostPage'
 import NotFoundPage from '@/pages/NotFound'
-import PostPage from '@/pages/PostPage'
-import RegisterPage from '@/pages/RegisterPage'
+import PostPage from '@/pages/posts/PostPage'
+import RegisterPage from '@/pages/user/RegisterPage'
 
 export const router = createBrowserRouter([
   {
@@ -25,8 +25,8 @@ export const router = createBrowserRouter([
           </UserOnly>
         ),
       },
-      { path: '/posts/new', element: <NewPostPage /> },
-      { path: '/posts/:postId', element: <PostPage /> },
+      { path: '/new', element: <NewPostPage /> },
+      { path: '/:shortKey', element: <PostPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

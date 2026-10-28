@@ -3,9 +3,10 @@ import { useEffect, useRef } from 'react'
 import { useFileDragActive } from '@/shared/lib/fileDrag'
 import { rise, stagger } from '@/shared/lib/motion'
 import StatusMark from '@/shared/ui/feedback/StatusMark'
-import { initPostEditor } from '../persist'
-import { useDraftStore, usePublishStore } from '../store'
-import type { PostRead } from '../types'
+import { initPostEditor } from '../models/draft-persistence'
+import { useDraftStore } from '../models/useDraftStore'
+import { usePublishStore } from '../models/usePublishStore'
+import type { PostRead } from '../models/types'
 import NewSectionZone from './NewSectionZone'
 import PublishPanel from './PublishPanel'
 import SectionCard from './SectionCard'
@@ -13,9 +14,10 @@ import SectionCard from './SectionCard'
 interface PostEditorProps {
   /** Called with the created post after a successful publish. */
   onPublished: (post: PostRead) => void
+  overlayActive: boolean
 }
 
-export default function PostEditor({ onPublished }: PostEditorProps) {
+export default function PostEditor({ onPublished, overlayActive = false }: PostEditorProps) {
   const hydrated = useDraftStore((s) => s.hydrated)
   const title = useDraftStore((s) => s.title)
   const setTitle = useDraftStore((s) => s.setTitle)
@@ -57,7 +59,7 @@ export default function PostEditor({ onPublished }: PostEditorProps) {
       <motion.div
         variants={stagger}
         initial="hidden"
-        animate="show"
+        animate={overlayActive ? 'hidden' : 'show'}
         className="grid gap-8 pb-24 pt-10 lg:grid-cols-[minmax(0,42rem)_17rem] lg:items-start lg:justify-center lg:gap-12"
       >
         <motion.div variants={rise} className="min-w-0">

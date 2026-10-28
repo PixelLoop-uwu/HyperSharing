@@ -1,8 +1,10 @@
+import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import GhostButton from '@/shared/ui/actions/GhostButton'
 import Skeleton from '@/shared/ui/feedback/Skeleton'
 import Card from '@/shared/ui/layout/Card'
-import { useMyPosts } from '../hooks/useMyPosts'
+import { stagger } from '@/shared/lib/motion'
+import { useMyPosts } from '../models/useMyPosts'
 import PostCard from './PostCard'
 
 const linkClass =
@@ -20,7 +22,7 @@ export default function PostsSection() {
         <ul className="mt-6 grid gap-3" aria-busy="true">
           {Array.from({ length: 4 }, (_, i) => (
             <li key={i}>
-              <Skeleton className="h-[5.5rem] w-full rounded-xl" />
+              <Skeleton className="h-22 w-full rounded-xl" />
             </li>
           ))}
         </ul>
@@ -39,11 +41,16 @@ export default function PostsSection() {
           </Link>
         </Card>
       ) : (
-        <ul className="mt-6 grid gap-3">
+        <motion.ul
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+          className="mt-6 grid gap-3"
+        >
           {posts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
-        </ul>
+        </motion.ul>
       )}
 
       {query.hasNextPage && (

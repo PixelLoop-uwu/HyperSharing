@@ -53,7 +53,7 @@ export default function PrimaryButton({
   const cls = [
     'relative inline-flex items-center gap-2 overflow-hidden rounded-lg bg-zinc-100 px-5 text-sm font-medium text-zinc-950',
     size === 'sm' ? 'py-2' : 'py-2.5',
-    'transition-transform hover:-translate-y-0.5 active:scale-[0.98]',
+    'transition-transform hover:bg-zinc-50 active:scale-[0.98]',
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-100',
     className,
   ]

@@ -1,9 +1,7 @@
-import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MotionConfig } from 'framer-motion'
 import { RouterProvider } from 'react-router-dom'
 import { router } from '@/app/routes'
-import { useAuth } from '@/features/user/store'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,12 +13,6 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
-  const load = useAuth((s) => s.load)
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
   return (
     <QueryClientProvider client={queryClient}>
       <MotionConfig reducedMotion="user">
