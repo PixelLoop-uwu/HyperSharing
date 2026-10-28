@@ -47,23 +47,21 @@ func New(pool *pgxpool.Pool, rdb *redis.Client, quota *storage.Quota, drafts *dr
 
 // CreateDraft валидирует структуру поста, проверяет лимиты и квоту, резервирует
 // суточную квоту и кладёт драфт в Redis. Возвращает id драфта и id слотов.
-func (s *Service) CreateDraft(ctx context.Context, owner string, in CreateDraftInput) (DraftRead, error) {
-  totalSize, err := validateDraft(s.limits, owner, in)
+func (s *Service) CreateDraft(ctx context.Context, userID uuid.UUID, in CreateDraftInput) (DraftRead, error) {
+  totalSize, err := validateDraft(s.limits, in)
   if err != nil {
     return DraftRead{}, err
   }
 
-  // Общая квота хранилища — только для залогиненных.
-  if userID, ok := ownerUserID(owner); ok {
-    used, err := s.repo.UserStorageUsed(ctx, userID)
-    if err != nil {
-      return DraftRead{}, err
-    }
-    if used+totalSize > s.limits.UserStorageQuota {
-      return DraftRead{}, ErrStorageQuotaExceeded
-    }
+  used, err := s.repo.UserStorageUsed(ctx, userID)
+  if err != nil {
+    return DraftRead{}, err
+  }
+  if used+totalSize > s.limits.StorageQuota {
+    return DraftRead{}, ErrStorageQuotaExceeded
   }
 
+  owner := draft.Owner(userID)
   // Резерв суточной квоты. Брошенный драфт резерв не возвращает.
   if err := s.quota.Reserve(ctx, owner, totalSize); err != nil {
     if errors.Is(err, storage.ErrQuotaExceeded) {
@@ -100,7 +98,7 @@ func (s *Service) CreateDraft(ctx context.Context, owner string, in CreateDraftI
   if err != nil {
     return DraftRead{}, err
   }
-  if err := s.drafts.Create(ctx, id.String(), owner, totalSize, raw, slots, s.limits.maxDrafts(owner)); err != nil {
+  if err := s.drafts.Create(ctx, id.String(), owner, totalSize, raw, slots, s.limits.MaxDrafts); err != nil {
     // Драфт не создался — возвращаем резерв квоты, чтобы не «съесть» лимит зря.
     if rerr := s.quota.Release(ctx, owner, totalSize); rerr != nil {
       slog.Error("release quota after failed draft", "owner", owner, "err", rerr)
@@ -195,9 +193,9 @@ func (s *Service) Publish(ctx context.Context, id string, requesterOwner string)
     }
   }
 
-  var authorID *uuid.UUID
-  if uid, ok := ownerUserID(d.Owner); ok {
-    authorID = &uid
+  authorID, err := ownerUserID(d.Owner)
+  if err != nil {
+    return PostRead{}, err
   }
 
   // short_key 62^8 — коллизия крайне редка, но на UNIQUE-нарушении перегенерируем
@@ -226,16 +224,24 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (PostRead, error) {
   if err != nil {
     return PostRead{}, err
   }
-  // Просроченный анонимный пост — 404, даже до очистки воркером.
-  if p.AuthorID == nil && time.Since(p.CreatedAt) > s.limits.AnonTTL {
-    return PostRead{}, ErrPostNotFound
-  }
+  return s.buildRead(ctx, p)
+}
 
-  sections, err := s.repo.Sections(ctx, id)
+// GetByShortKey читает пост по публичному ключу из URL /{short_key}.
+func (s *Service) GetByShortKey(ctx context.Context, shortKey string) (PostRead, error) {
+  p, err := s.repo.GetPostByShortKey(ctx, shortKey)
   if err != nil {
     return PostRead{}, err
   }
-  files, err := s.repo.Files(ctx, id)
+  return s.buildRead(ctx, p)
+}
+
+func (s *Service) buildRead(ctx context.Context, p Post) (PostRead, error) {
+  sections, err := s.repo.Sections(ctx, p.ID)
+  if err != nil {
+    return PostRead{}, err
+  }
+  files, err := s.repo.Files(ctx, p.ID)
   if err != nil {
     return PostRead{}, err
   }
@@ -246,22 +252,21 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (PostRead, error) {
 
   out := PostRead{
     ID:        p.ID,
+    ShortKey:  p.ShortKey,
     Title:     p.Title,
     CreatedAt: p.CreatedAt,
     Sections:  make([]SectionRead, 0, len(sections)),
   }
-  if p.AuthorID != nil {
-    author := &AuthorRead{Username: p.AuthorUsername}
-    if p.AvatarVersion != "" {
-      url := s.apiPrefix + "/avatars/" + p.AuthorID.String() + "?v=" + p.AvatarVersion
-      author.AvatarURL = &url
-    }
-    out.Author = author
+  author := &AuthorRead{Username: p.AuthorUsername}
+  if p.AvatarVersion != "" {
+    url := "/avatars/" + p.AuthorID.String() + "?v=" + p.AvatarVersion
+    author.AvatarURL = &url
   }
+  out.Author = author
   for _, sec := range sections {
     sr := SectionRead{Body: sec.Body, Files: make([]FileRead, 0, len(bySection[sec.ID]))}
     for _, f := range bySection[sec.ID] {
-      sr.Files = append(sr.Files, FileRead{Name: f.Name, Mime: f.MimeType, Size: f.Size, URL: s.apiPrefix + "/f/" + f.ShortKey})
+      sr.Files = append(sr.Files, FileRead{Name: f.Name, Mime: f.MimeType, Size: f.Size, URL: "/f/" + f.ShortKey})
     }
     out.Sections = append(out.Sections, sr)
   }
@@ -302,7 +307,7 @@ func (s *Service) ListMine(ctx context.Context, userID uuid.UUID, limit int, cur
 // суточный лимит загрузки. Значения условные: Daily.Used — это зарезервированные
 // байты (включая ещё недозагруженные драфты), а не фактически залитое.
 func (s *Service) Quota(ctx context.Context, userID uuid.UUID) (QuotaRead, error) {
-  owner := draft.OwnerUserPrefix + userID.String()
+  owner := draft.Owner(userID)
   usedStorage, err := s.repo.UserStorageUsed(ctx, userID)
   if err != nil {
     return QuotaRead{}, err
@@ -312,8 +317,8 @@ func (s *Service) Quota(ctx context.Context, userID uuid.UUID) (QuotaRead, error
     return QuotaRead{}, err
   }
   return QuotaRead{
-    Storage: QuotaMetric{Used: usedStorage, Limit: s.limits.UserStorageQuota},
-    Daily:   QuotaMetric{Used: usedDaily, Limit: s.quota.Limit(owner)},
+    Storage: QuotaMetric{Used: usedStorage, Limit: s.limits.StorageQuota},
+    Daily:   QuotaMetric{Used: usedDaily, Limit: s.quota.Limit()},
   }, nil
 }
 
@@ -322,8 +327,7 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) er
   if err != nil {
     return err
   }
-  // Анонимный пост удалить вручную нельзя (нет автора) — его снимает TTL-воркер.
-  if p.AuthorID == nil || *p.AuthorID != userID {
+  if p.AuthorID != userID {
     return ErrForbidden
   }
   // Объекты в MinIO удаляет воркер (транзакция БД до S3 не дотягивается).
@@ -332,7 +336,7 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) er
 
 // persistPost создаёт пост, секции и файлы в одной транзакции. short_key
 // генерируются внутри — при UNIQUE-нарушении вызывающий пробует снова.
-func (s *Service) persistPost(ctx context.Context, draftID uuid.UUID, authorID *uuid.UUID, structure draftStructure, slots map[string]draft.Slot, totalSize int64) error {
+func (s *Service) persistPost(ctx context.Context, draftID uuid.UUID, authorID uuid.UUID, structure draftStructure, slots map[string]draft.Slot, totalSize int64) error {
   tx, err := s.pool.Begin(ctx)
   if err != nil {
     return err
@@ -340,7 +344,11 @@ func (s *Service) persistPost(ctx context.Context, draftID uuid.UUID, authorID *
   defer func() { _ = tx.Rollback(ctx) }()
   txn := s.repo.WithTx(tx)
 
-  if err := txn.CreatePost(ctx, draftID, authorID, structure.Title, totalSize); err != nil {
+  postShortKey, err := newShortKey()
+  if err != nil {
+    return err
+  }
+  if err := txn.CreatePost(ctx, draftID, authorID, postShortKey, structure.Title, totalSize); err != nil {
     return err
   }
   for i, sec := range structure.Sections {
@@ -368,11 +376,14 @@ func (s *Service) persistPost(ctx context.Context, draftID uuid.UUID, authorID *
   return tx.Commit(ctx)
 }
 
-// isShortKeyCollision отличает UNIQUE-нарушение по short_key от остальных ошибок,
-// чтобы публикацию можно было безопасно повторить с новыми ключами.
+// isShortKeyCollision отличает UNIQUE-нарушение по short_key (поста или файла) от
+// остальных ошибок, чтобы публикацию можно было безопасно повторить с новыми ключами.
 func isShortKeyCollision(err error) bool {
   var pgErr *pgconn.PgError
-  return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "files_short_key_key"
+  if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+    return false
+  }
+  return pgErr.ConstraintName == "files_short_key_key" || pgErr.ConstraintName == "posts_short_key_key"
 }
 
 type sectionFile struct {
@@ -392,19 +403,19 @@ func filesOfSection(slots map[string]draft.Slot, sectionID string) []sectionFile
   return out
 }
 
-func validateDraft(lim Limits, owner string, in CreateDraftInput) (int64, error) {
-  if len(in.Sections) == 0 && strings.TrimSpace(in.Title) == "" {
-    return 0, &ValidationError{"post is empty"}
+func validateDraft(lim Limits, in CreateDraftInput) (int64, error) {
+  if len(in.Sections) == 0 {
+    return 0, &ValidationError{"post must have at least one section"}
   }
   if len(in.Title) > lim.TitleMaxLen {
     return 0, &ValidationError{"title too long"}
   }
-  if len(in.Sections) > lim.maxSections(owner) {
+  if len(in.Sections) > lim.MaxSections {
     return 0, &ValidationError{"too many sections"}
   }
 
-  maxFiles := lim.maxFiles(owner)
-  maxBytes := lim.maxBytes(owner)
+  maxFiles := lim.MaxFiles
+  maxBytes := lim.MaxBytes
   fileCount := 0
   var totalSize int64
   for _, sec := range in.Sections {

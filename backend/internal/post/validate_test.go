@@ -3,32 +3,22 @@ package post
 import (
   "errors"
   "testing"
-  "time"
-
-  "hypersharing/internal/draft"
 )
 
 func testLimits() Limits {
   return Limits{
-    AnonMaxBytes:     100,
-    UserMaxBytes:     1000,
-    AnonMaxFiles:     2,
-    UserMaxFiles:     5,
-    AnonMaxSections:  2,
-    UserMaxSections:  5,
-    AnonMaxDrafts:    2,
-    UserMaxDrafts:    3,
-    TitleMaxLen:      10,
-    SectionMaxLen:    10,
-    AnonTTL:          time.Hour,
-    DraftTTL:         time.Hour,
-    UserStorageQuota: 10000,
+    MaxBytes:      1000,
+    MaxFiles:      5,
+    MaxSections:   5,
+    MaxDrafts:     3,
+    TitleMaxLen:   10,
+    SectionMaxLen: 10,
+    StorageQuota:  10000,
   }
 }
 
 func TestValidateDraft(t *testing.T) {
   lim := testLimits()
-  anon := draft.OwnerIPPrefix + "x"
 
   ok := CreateDraftInput{
     Title:    "title",
@@ -41,18 +31,19 @@ func TestValidateDraft(t *testing.T) {
     want error
   }{
     {"ok", ok, nil},
+    {"no sections", withSections(ok, 0), errValidation()},
     {"title too long", withTitle(ok, string(make([]byte, 11))), errValidation()},
-    {"too many sections", withSections(ok, 3), errValidation()},
-    {"too many files", withFiles(ok, 3), errValidation()},
-    {"file too large", withFileSize(ok, 101), errValidation()},
-    {"post too large", withTotal(ok, 101), errValidation()},
+    {"too many sections", withSections(ok, 6), errValidation()},
+    {"too many files", withFiles(ok, 6), errValidation()},
+    {"file too large", withFileSize(ok, 1001), errValidation()},
+    {"post too large", withTotal(ok, 1001), errValidation()},
     {"section too long", withBody(ok, string(make([]byte, 11))), errValidation()},
     {"empty name", withName(ok, ""), errValidation()},
   }
 
   for _, c := range cases {
     t.Run(c.name, func(t *testing.T) {
-      _, err := validateDraft(lim, anon, c.in)
+      _, err := validateDraft(lim, c.in)
       if c.want == nil && err != nil {
         t.Fatalf("unexpected error: %v", err)
       }
@@ -60,25 +51,6 @@ func TestValidateDraft(t *testing.T) {
         t.Fatalf("want ValidationError, got %v", err)
       }
     })
-  }
-}
-
-func TestValidateDraftUserLimitsHigher(t *testing.T) {
-  lim := testLimits()
-  user := draft.OwnerUserPrefix + "00000000-0000-0000-0000-000000000000"
-
-  // 3 файла: для анонима превышает (2), для юзера — нет (5).
-  in := withFiles(CreateDraftInput{Sections: []SectionInput{{Files: []FileInput{
-    {Name: "a", Mime: "x", Size: 1},
-    {Name: "b", Mime: "x", Size: 1},
-    {Name: "c", Mime: "x", Size: 1},
-  }}}}, 3)
-
-  if _, err := validateDraft(lim, draft.OwnerIPPrefix+"x", in); !isValidationErr(err) {
-    t.Fatalf("anon should reject 3 files, got %v", err)
-  }
-  if _, err := validateDraft(lim, user, in); err != nil {
-    t.Fatalf("user should accept 3 files, got %v", err)
   }
 }
 
@@ -119,7 +91,7 @@ func withFileSize(in CreateDraftInput, size int64) CreateDraftInput {
 }
 
 func withTotal(in CreateDraftInput, total int64) CreateDraftInput {
-  // два файла по 51 — сумма 102 > 100, но каждый ≤ 100
+  // два файла по total-1 и 1 — сумма total, каждый ≤ limit
   in.Sections = []SectionInput{{Files: []FileInput{
     {Name: "a", Mime: "x", Size: total - 1},
     {Name: "b", Mime: "x", Size: 1},

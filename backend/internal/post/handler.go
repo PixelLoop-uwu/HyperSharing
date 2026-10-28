@@ -31,15 +31,19 @@ func (h *Handler) CreateDraft(w http.ResponseWriter, r *http.Request) {
   if !ok {
     return
   }
-  owner := resolveOwner(r, user.UserFrom(r.Context()))
-  if ok, err := h.limiter.Allow(r.Context(), "rl:draft:"+owner, h.draftLimit, h.window); err != nil {
+  u := user.UserFrom(r.Context())
+  if u == nil { // RequireAuth гарантирует не-nil; защита от неверного монтажа
+    httpx.Error(w, http.StatusUnauthorized, "unauthorized", "authentication required")
+    return
+  }
+  if ok, err := h.limiter.Allow(r.Context(), "rl:draft:"+draft.Owner(u.ID), h.draftLimit, h.window); err != nil {
     httpx.Internal(w, r, err)
     return
   } else if !ok {
     httpx.Error(w, http.StatusTooManyRequests, "rate_limited", "too many requests")
     return
   }
-  d, err := h.svc.CreateDraft(r.Context(), owner, in)
+  d, err := h.svc.CreateDraft(r.Context(), u.ID, in)
   if err != nil {
     h.writeError(w, r, err)
     return
@@ -48,7 +52,12 @@ func (h *Handler) CreateDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CancelDraft(w http.ResponseWriter, r *http.Request) {
-  if err := h.svc.CancelDraft(r.Context(), chi.URLParam(r, "id"), resolveOwner(r, user.UserFrom(r.Context()))); err != nil {
+  u := user.UserFrom(r.Context())
+  if u == nil { // RequireAuth гарантирует не-nil; защита от неверного монтажа
+    httpx.Error(w, http.StatusUnauthorized, "unauthorized", "authentication required")
+    return
+  }
+  if err := h.svc.CancelDraft(r.Context(), chi.URLParam(r, "id"), draft.Owner(u.ID)); err != nil {
     h.writeError(w, r, err)
     return
   }
@@ -56,7 +65,12 @@ func (h *Handler) CancelDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Publish(w http.ResponseWriter, r *http.Request) {
-  p, err := h.svc.Publish(r.Context(), chi.URLParam(r, "id"), resolveOwner(r, user.UserFrom(r.Context())))
+  u := user.UserFrom(r.Context())
+  if u == nil { // RequireAuth гарантирует не-nil; защита от неверного монтажа
+    httpx.Error(w, http.StatusUnauthorized, "unauthorized", "authentication required")
+    return
+  }
+  p, err := h.svc.Publish(r.Context(), chi.URLParam(r, "id"), draft.Owner(u.ID))
   if err != nil {
     h.writeError(w, r, err)
     return
@@ -64,13 +78,9 @@ func (h *Handler) Publish(w http.ResponseWriter, r *http.Request) {
   httpx.JSON(w, http.StatusOK, p)
 }
 
-func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-  id, err := uuid.Parse(chi.URLParam(r, "id"))
-  if err != nil {
-    httpx.Error(w, http.StatusNotFound, "not_found", "post not found")
-    return
-  }
-  p, err := h.svc.Get(r.Context(), id)
+// GetByShortKey — публичное чтение поста по /{shortKey}.
+func (h *Handler) GetByShortKey(w http.ResponseWriter, r *http.Request) {
+  p, err := h.svc.GetByShortKey(r.Context(), chi.URLParam(r, "shortKey"))
   if err != nil {
     h.writeError(w, r, err)
     return

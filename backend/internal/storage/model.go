@@ -2,7 +2,6 @@ package storage
 
 import (
   "errors"
-  "time"
 
   "github.com/google/uuid"
 )
@@ -22,10 +21,6 @@ type File struct {
   MimeType   string
   Size       int64
   StorageKey string
-  // AuthorID и PostCreatedAt приходят из JOIN с posts: нужны, чтобы не отдавать
-  // файлы просроченных анонимных постов до прогона воркера.
-  AuthorID      *uuid.UUID
-  PostCreatedAt time.Time
 }
 
 // Доменные ошибки storage.

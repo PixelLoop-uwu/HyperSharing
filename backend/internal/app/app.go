@@ -101,13 +101,11 @@ func Run(ctx context.Context) error {
     Bucket:              cfg.S3.Bucket,
     ObjectPrefix:        cfg.Uploads.ObjectPrefix,
     MetadataPrefix:      cfg.Uploads.MetadataPrefix,
-    QuotaAnonDailyBytes: cfg.Quota.AnonDailyBytes,
-    QuotaUserDailyBytes: cfg.Quota.UserDailyBytes,
-    FileNotFoundLimit:   cfg.RateLimit.FileNotFound,
-    DownloadLimit:       cfg.RateLimit.Download,
-    RateLimitWindow:     cfg.RateLimit.Window,
-    AnonTTL:             cfg.Posts.AnonTTL,
-    TusBasePath:         apiPrefix + "/uploads/",
+    DailyBytes:        cfg.Quota.DailyBytes,
+    FileNotFoundLimit: cfg.RateLimit.FileNotFound,
+    DownloadLimit:     cfg.RateLimit.Download,
+    RateLimitWindow:   cfg.RateLimit.Window,
+    TusBasePath:       apiPrefix + "/uploads/",
   }, rdb, pool, s3c.Bucket(cfg.S3.Bucket), draftStore, limiter)
   if err != nil {
     return err
@@ -115,19 +113,13 @@ func Run(ctx context.Context) error {
 
   // post feature
   postSvc := post.New(pool, rdb, storageSvc.Quota(), draftStore, post.Limits{
-    AnonMaxBytes:     cfg.Posts.AnonMaxBytes,
-    UserMaxBytes:     cfg.Posts.UserMaxBytes,
-    AnonMaxFiles:     cfg.Posts.AnonMaxFiles,
-    UserMaxFiles:     cfg.Posts.UserMaxFiles,
-    AnonMaxSections:  cfg.Posts.AnonMaxSections,
-    UserMaxSections:  cfg.Posts.UserMaxSections,
-    AnonMaxDrafts:    cfg.Posts.AnonMaxDrafts,
-    UserMaxDrafts:    cfg.Posts.UserMaxDrafts,
-    TitleMaxLen:      cfg.Posts.TitleMaxLen,
-    SectionMaxLen:    cfg.Posts.SectionMaxLen,
-    AnonTTL:          cfg.Posts.AnonTTL,
-    DraftTTL:         cfg.Posts.DraftTTL,
-    UserStorageQuota: cfg.Posts.UserStorageQuota,
+    MaxBytes:      cfg.Posts.MaxBytes,
+    MaxFiles:      cfg.Posts.MaxFiles,
+    MaxSections:   cfg.Posts.MaxSections,
+    MaxDrafts:     cfg.Posts.MaxDrafts,
+    TitleMaxLen:   cfg.Posts.TitleMaxLen,
+    SectionMaxLen: cfg.Posts.SectionMaxLen,
+    StorageQuota:  cfg.Posts.StorageQuota,
   }, apiPrefix)
   postHandler := post.NewHandler(postSvc, limiter, cfg.RateLimit.Draft, cfg.RateLimit.Window)
 
@@ -147,11 +139,11 @@ func Run(ctx context.Context) error {
   api.Get("/avatars/{userID}", avatarService.Serve)
 
   api.Route("/drafts", func(r chi.Router) {
-    r.With(user.OptionalAuth(userSvc)).Post("/", postHandler.CreateDraft)
-    r.With(user.OptionalAuth(userSvc)).Delete("/{id}", postHandler.CancelDraft)
-    r.With(user.OptionalAuth(userSvc)).Post("/{id}/publish", postHandler.Publish)
+    r.With(user.RequireAuth(userSvc)).Post("/", postHandler.CreateDraft)
+    r.With(user.RequireAuth(userSvc)).Delete("/{id}", postHandler.CancelDraft)
+    r.With(user.RequireAuth(userSvc)).Post("/{id}/publish", postHandler.Publish)
   })
-  api.Get("/posts/{id}", postHandler.Get)
+  api.Get("/posts/{shortKey}", postHandler.GetByShortKey)
   api.With(user.RequireAuth(userSvc)).Delete("/posts/{id}", postHandler.Delete)
   api.With(user.RequireAuth(userSvc)).Get("/me/posts", postHandler.ListMine)
   api.With(user.RequireAuth(userSvc)).Get("/me/quota", postHandler.Quota)
@@ -180,9 +172,9 @@ func Run(ctx context.Context) error {
   // tus-загрузки на отдельном сервере: у них долгие PATCH, поэтому общий
   // ReadTimeout/WriteTimeout к ним не применяется (иначе легитимная загрузка
   // обрывалась бы). Порядок тот же, что был внутри api-роутера:
-  // OriginCheck → OptionalAuth → tus.
+  // OriginCheck → RequireAuth → tus.
   tus := http.StripPrefix(apiPrefix+"/uploads", storageSvc.Tus())
-  tus = httpx.OriginCheck(cfg.AllowedOrigins)(user.OptionalAuth(userSvc)(tus))
+  tus = httpx.OriginCheck(cfg.AllowedOrigins)(user.RequireAuth(userSvc)(tus))
   tusSrv := &http.Server{
     Addr:              cfg.TusAddr,
     Handler:           httpx.Chain(tus, httpx.RequestID, httpx.AccessLog, httpx.Recover),

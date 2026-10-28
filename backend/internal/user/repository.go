@@ -31,7 +31,7 @@ func (r *Repository) CreateUser(ctx context.Context, username, email, passwordHa
   if err != nil {
     return User{}, mapPgErr(err)
   }
-  return toUser(row.ID, row.Username, row.Email, row.EmailVerified, row.IsAdmin, row.CreatedAt), nil
+  return toUser(row.ID, row.Username, row.Email, row.EmailVerified, row.IsAdmin, row.CreatedAt, pgtype.Text{}), nil
 }
 
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -42,7 +42,7 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (User, error
     }
     return User{}, err
   }
-  return toUser(row.ID, row.Username, row.Email, row.EmailVerified, row.IsAdmin, row.CreatedAt), nil
+  return toUser(row.ID, row.Username, row.Email, row.EmailVerified, row.IsAdmin, row.CreatedAt, row.AvatarVersion), nil
 }
 
 func (r *Repository) GetUserAuthByEmail(ctx context.Context, email string) (UserAuth, error) {
@@ -54,12 +54,16 @@ func (r *Repository) GetUserAuthByEmail(ctx context.Context, email string) (User
     return UserAuth{}, err
   }
   return UserAuth{
-    User:         toUser(row.ID, row.Username, row.Email, row.EmailVerified, row.IsAdmin, row.CreatedAt),
+    User:         toUser(row.ID, row.Username, row.Email, row.EmailVerified, row.IsAdmin, row.CreatedAt, row.AvatarVersion),
     PasswordHash: row.PasswordHash,
   }, nil
 }
 
-func toUser(id uuid.UUID, username, email string, verified, admin bool, createdAt time.Time) User {
+func toUser(id uuid.UUID, username, email string, verified, admin bool, createdAt time.Time, avatarVersion pgtype.Text) User {
+  var avatar *string
+  if avatarVersion.Valid {
+    avatar = &avatarVersion.String
+  }
   return User{
     ID:            id,
     Username:      username,
@@ -67,6 +71,7 @@ func toUser(id uuid.UUID, username, email string, verified, admin bool, createdA
     EmailVerified: verified,
     IsAdmin:       admin,
     CreatedAt:     createdAt,
+    AvatarVersion: avatar,
   }
 }
 

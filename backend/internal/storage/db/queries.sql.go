@@ -7,17 +7,14 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getFileByShortKey = `-- name: GetFileByShortKey :one
-SELECT f.id, f.post_id, f.name, f.mime_type, f.size, f.storage_key, p.author_id, p.created_at
-FROM files f
-JOIN posts p ON p.id = f.post_id
-WHERE f.short_key = $1
+SELECT id, post_id, name, mime_type, size, storage_key
+FROM files
+WHERE short_key = $1
 `
 
 type GetFileByShortKeyRow struct {
@@ -27,8 +24,6 @@ type GetFileByShortKeyRow struct {
 	MimeType   string
 	Size       int64
 	StorageKey string
-	AuthorID   pgtype.UUID
-	CreatedAt  time.Time
 }
 
 func (q *Queries) GetFileByShortKey(ctx context.Context, shortKey string) (GetFileByShortKeyRow, error) {
@@ -41,8 +36,6 @@ func (q *Queries) GetFileByShortKey(ctx context.Context, shortKey string) (GetFi
 		&i.MimeType,
 		&i.Size,
 		&i.StorageKey,
-		&i.AuthorID,
-		&i.CreatedAt,
 	)
 	return i, err
 }

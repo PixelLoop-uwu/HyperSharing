@@ -25,7 +25,7 @@ func seedSlot(t *testing.T, s *Store, rdb *redis.Client, draftID string, fileID 
   ctx := context.Background()
   structure, _ := json.Marshal(map[string]string{"title": "t"})
   slot := Slot{Name: "a.txt", Mime: "text/plain", Size: size, Section: uuid.NewString(), Position: 0, Status: status}
-  if err := s.Create(ctx, draftID, OwnerIPPrefix+"abc", size, structure, map[string]Slot{fileID.String(): slot}, 2); err != nil {
+  if err := s.Create(ctx, draftID, OwnerUserPrefix+"abc", size, structure, map[string]Slot{fileID.String(): slot}, 2); err != nil {
     t.Fatalf("seed: %v", err)
   }
 }
@@ -36,7 +36,7 @@ func TestCreateGetSlotsDelete(t *testing.T) {
   s, rdb := newTestStore(t)
   ctx := context.Background()
   id := uuid.NewString()
-  owner := OwnerIPPrefix + "abc"
+  owner := OwnerUserPrefix + "abc"
 
   structure := json.RawMessage(`{"title":"t","sections":[{"id":"` + uuid.NewString() + `","body":"b"}]}`)
   slots := map[string]Slot{
@@ -80,7 +80,7 @@ func TestGetNotFound(t *testing.T) {
 func TestActiveDraftLimit(t *testing.T) {
   s, _ := newTestStore(t)
   ctx := context.Background()
-  owner := OwnerIPPrefix + "abc"
+  owner := OwnerUserPrefix + "abc"
 
   for i := 0; i < 2; i++ {
     if err := s.Create(ctx, uuid.NewString(), owner, 0, json.RawMessage(`{}`), nil, 2); err != nil {
@@ -208,7 +208,7 @@ func TestOwnerOf(t *testing.T) {
   seedSlot(t, s, rdb, draftID, fileID, Pending, 42)
 
   owner, err := s.OwnerOf(ctx, draftID)
-  if err != nil || owner != OwnerIPPrefix+"abc" {
+  if err != nil || owner != OwnerUserPrefix+"abc" {
     t.Fatalf("owner: %q %v", owner, err)
   }
   if _, err := s.OwnerOf(ctx, uuid.NewString()); !errors.Is(err, ErrDraftNotFound) {

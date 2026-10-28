@@ -37,20 +37,6 @@ func RequireAuth(svc *Service) func(http.Handler) http.Handler {
   }
 }
 
-// OptionalAuth кладёт пользователя в контекст при действующей сессии, иначе аноним (nil).
-func OptionalAuth(svc *Service) func(http.Handler) http.Handler {
-  return func(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-      u, err := svc.ResolveSession(r.Context(), tokenFromCookie(r))
-      if err != nil {
-        httpx.Internal(w, r, err)
-        return
-      }
-      next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), u)))
-    })
-  }
-}
-
 func tokenFromCookie(r *http.Request) string {
   c, err := r.Cookie(cookieName)
   if err != nil {

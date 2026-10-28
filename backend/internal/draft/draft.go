@@ -45,11 +45,8 @@ type Draft struct {
   Structure json.RawMessage
 }
 
-// Владелец драфта. Формат: "user:<uuid>" или "ip:<hash>".
-const (
-  OwnerUserPrefix = "user:"
-  OwnerIPPrefix   = "ip:"
-)
+// Владелец драфта: "user:<uuid>".
+const OwnerUserPrefix = "user:"
 
 // Поля хеша draft:{id}. Не экспортируются: снаружи пакета читать их не нужно.
 const (

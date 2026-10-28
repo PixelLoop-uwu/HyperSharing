@@ -53,28 +53,21 @@ type Uploads struct {
   MetadataPrefix string `env:"METADATA_PREFIX" envDefault:"tusmeta/"` // префикс служебных .info/.part
 }
 
-// Quota — суточные лимиты загрузки. Резерв делает фича post при создании
-// драфта; здесь только защитный пере-чек на старте загрузки.
+// Quota — суточный лимит загрузки. Резерв делает фича post при создании драфта.
 type Quota struct {
-  AnonDailyBytes int64 `env:"ANON_DAILY_BYTES" envDefault:"524288000"`  // 500 MiB/сутки на IP
-  UserDailyBytes int64 `env:"USER_DAILY_BYTES" envDefault:"5368709120"` // 5 GiB/сутки на пользователя
+  DailyBytes int64 `env:"DAILY_BYTES" envDefault:"5368709120"` // 5 GiB/сутки на пользователя
 }
 
-// Posts — лимиты постов и драфтов (аноним vs залогиненный). См. backend/Claude.md.
+// Posts — лимиты постов и драфтов залогиненного пользователя.
 type Posts struct {
-  AnonMaxBytes    int64         `env:"ANON_MAX_BYTES" envDefault:"104857600"`      // 100 MiB
-  UserMaxBytes    int64         `env:"USER_MAX_BYTES" envDefault:"734003200"`      // 700 MiB
-  AnonMaxFiles    int           `env:"ANON_MAX_FILES" envDefault:"8"`
-  UserMaxFiles    int           `env:"USER_MAX_FILES" envDefault:"24"`
-  AnonMaxSections int           `env:"ANON_MAX_SECTIONS" envDefault:"16"`
-  UserMaxSections int           `env:"USER_MAX_SECTIONS" envDefault:"64"`
-  AnonMaxDrafts   int           `env:"ANON_MAX_DRAFTS" envDefault:"2"`
-  UserMaxDrafts   int           `env:"USER_MAX_DRAFTS" envDefault:"3"`
-  TitleMaxLen     int           `env:"TITLE_MAX_LEN" envDefault:"120"`
-  SectionMaxLen   int           `env:"SECTION_MAX_LEN" envDefault:"10000"`
-  AnonTTL         time.Duration `env:"ANON_TTL" envDefault:"168h"`                // срок жизни анонимного поста
-  DraftTTL        time.Duration `env:"DRAFT_TTL" envDefault:"24h"`                // TTL драфта
-  UserStorageQuota int64        `env:"USER_STORAGE_QUOTA" envDefault:"10737418240"` // 10 GiB суммарно
+  MaxBytes      int64         `env:"MAX_BYTES" envDefault:"734003200"`      // 700 MiB
+  MaxFiles      int           `env:"MAX_FILES" envDefault:"24"`
+  MaxSections   int           `env:"MAX_SECTIONS" envDefault:"64"`
+  MaxDrafts     int           `env:"MAX_DRAFTS" envDefault:"3"`
+  TitleMaxLen   int           `env:"TITLE_MAX_LEN" envDefault:"120"`
+  SectionMaxLen int           `env:"SECTION_MAX_LEN" envDefault:"10000"`
+  DraftTTL      time.Duration `env:"DRAFT_TTL" envDefault:"24h"`            // TTL драфта
+  StorageQuota  int64         `env:"STORAGE_QUOTA" envDefault:"10737418240"` // 10 GiB суммарно
 }
 
 // Worker — параметры фоновой очистки (cmd/worker).

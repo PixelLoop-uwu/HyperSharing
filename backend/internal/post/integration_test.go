@@ -27,16 +27,25 @@ func newSvc(t *testing.T, limits Limits) (*Service, *pgxpool.Pool) {
   mr := miniredis.RunT(t)
   rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
   t.Cleanup(func() { _ = rdb.Close() })
-  quota := storage.NewQuota(rdb, 1<<20, 10<<20)
-  return New(pool, rdb, quota, draft.NewStore(rdb, time.Hour), limits), pool
+  quota := storage.NewQuota(rdb, 10<<20)
+  return New(pool, rdb, quota, draft.NewStore(rdb, time.Hour), limits, "/api/v1"), pool
 }
 
-func TestPostLifecycleAnon(t *testing.T) {
-  svc, _ := newSvc(t, testLimits())
-  ctx := context.Background()
-  owner := draft.OwnerIPPrefix + "deadbeef"
+func createUser(t *testing.T, pool *pgxpool.Pool, name string) uuid.UUID {
+  t.Helper()
+  u, err := user.NewRepository(pool).CreateUser(context.Background(), name, name+"@example.com", "x")
+  if err != nil {
+    t.Fatalf("create user: %v", err)
+  }
+  return u.ID
+}
 
-  d, err := svc.CreateDraft(ctx, owner, CreateDraftInput{
+func TestPostLifecycle(t *testing.T) {
+  svc, pool := newSvc(t, testLimits())
+  ctx := context.Background()
+  userID := createUser(t, pool, "alice")
+
+  d, err := svc.CreateDraft(ctx, userID, CreateDraftInput{
     Title:    "hello",
     Sections: []SectionInput{{Body: "text", Files: []FileInput{{Name: "a.txt", Mime: "text/plain", Size: 10}}}},
   })
@@ -53,7 +62,7 @@ func TestPostLifecycleAnon(t *testing.T) {
     t.Fatalf("finish slot: %v", err)
   }
 
-  published, err := svc.Publish(ctx, d.ID, owner)
+  published, err := svc.Publish(ctx, d.ID, draft.Owner(userID))
   if err != nil {
     t.Fatalf("publish: %v", err)
   }
@@ -69,8 +78,20 @@ func TestPostLifecycleAnon(t *testing.T) {
     t.Fatal("file url empty")
   }
 
+  // публичное чтение по короткому ключу
+  if published.ShortKey == "" {
+    t.Fatal("post short_key empty")
+  }
+  byKey, err := svc.GetByShortKey(ctx, published.ShortKey)
+  if err != nil {
+    t.Fatalf("get by short key: %v", err)
+  }
+  if byKey.ID != published.ID {
+    t.Fatalf("get by short key mismatch: %v != %v", byKey.ID, published.ID)
+  }
+
   // идемпотентность публикации
-  again, err := svc.Publish(ctx, d.ID, owner)
+  again, err := svc.Publish(ctx, d.ID, draft.Owner(userID))
   if err != nil {
     t.Fatalf("second publish: %v", err)
   }
@@ -79,44 +100,37 @@ func TestPostLifecycleAnon(t *testing.T) {
   }
 }
 
-func TestPostExpiredAnon(t *testing.T) {
-  limits := testLimits()
-  limits.AnonTTL = 500 * time.Millisecond // достаточно для публикации, но быстро истекает
-  svc, _ := newSvc(t, limits)
+func TestCancelDraft(t *testing.T) {
+  svc, pool := newSvc(t, testLimits())
   ctx := context.Background()
+  userID := createUser(t, pool, "bob")
 
-  d, err := svc.CreateDraft(ctx, draft.OwnerIPPrefix+"deadbeef", CreateDraftInput{Sections: []SectionInput{{Body: "x"}}})
+  d, err := svc.CreateDraft(ctx, userID, CreateDraftInput{
+    Sections: []SectionInput{{Files: []FileInput{{Name: "a", Mime: "x", Size: 10}}}},
+  })
   if err != nil {
     t.Fatalf("create draft: %v", err)
   }
-  p, err := svc.Publish(ctx, d.ID, draft.OwnerIPPrefix+"deadbeef")
-  if err != nil {
-    t.Fatalf("publish: %v", err)
+  if err := svc.CancelDraft(ctx, d.ID, draft.Owner(userID)); err != nil {
+    t.Fatalf("cancel: %v", err)
   }
-
-  time.Sleep(time.Second)
-  if _, err := svc.Get(ctx, p.ID); !errors.Is(err, ErrPostNotFound) {
-    t.Fatalf("want ErrPostNotFound (expired), got %v", err)
+  if _, err := svc.drafts.Get(ctx, d.ID); !errors.Is(err, draft.ErrDraftNotFound) {
+    t.Fatalf("draft must be gone, got %v", err)
   }
 }
 
 func TestListMineAndDelete(t *testing.T) {
   svc, pool := newSvc(t, testLimits())
   ctx := context.Background()
-
-  u, err := user.NewRepository(pool).CreateUser(ctx, "alice", "alice@example.com", "x")
-  if err != nil {
-    t.Fatalf("create user: %v", err)
-  }
-  owner := draft.OwnerUserPrefix + u.ID.String()
+  userID := createUser(t, pool, "alice")
 
   ids := make([]uuid.UUID, 2)
   for i := 0; i < 2; i++ {
-    d, err := svc.CreateDraft(ctx, owner, CreateDraftInput{Title: fmt.Sprintf("post %d", i)})
+    d, err := svc.CreateDraft(ctx, userID, CreateDraftInput{Title: fmt.Sprintf("post %d", i)})
     if err != nil {
       t.Fatalf("create draft %d: %v", i, err)
     }
-    p, err := svc.Publish(ctx, d.ID, owner)
+    p, err := svc.Publish(ctx, d.ID, draft.Owner(userID))
     if err != nil {
       t.Fatalf("publish %d: %v", i, err)
     }
@@ -124,7 +138,7 @@ func TestListMineAndDelete(t *testing.T) {
   }
 
   // страница 1 (limit 1) → есть курсор
-  page1, err := svc.ListMine(ctx, u.ID, 1, "")
+  page1, err := svc.ListMine(ctx, userID, 1, "")
   if err != nil {
     t.Fatalf("list: %v", err)
   }
@@ -132,7 +146,7 @@ func TestListMineAndDelete(t *testing.T) {
     t.Fatalf("page1: %+v", page1)
   }
   // страница 2 — вторая запись, курсора больше нет
-  page2, err := svc.ListMine(ctx, u.ID, 1, *page1.NextCursor)
+  page2, err := svc.ListMine(ctx, userID, 1, *page1.NextCursor)
   if err != nil {
     t.Fatalf("list page2: %v", err)
   }
@@ -144,7 +158,7 @@ func TestListMineAndDelete(t *testing.T) {
     t.Fatalf("pagination overlap/duplicate: %v %v", page1.Posts[0].ID, page2.Posts[0].ID)
   }
 
-  if err := svc.Delete(ctx, ids[0], u.ID); err != nil {
+  if err := svc.Delete(ctx, ids[0], userID); err != nil {
     t.Fatalf("delete: %v", err)
   }
   if _, err := svc.Get(ctx, ids[0]); !errors.Is(err, ErrPostNotFound) {

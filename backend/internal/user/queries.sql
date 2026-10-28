@@ -4,12 +4,12 @@ VALUES (sqlc.arg(username), sqlc.arg(email), sqlc.arg(password_hash))
 RETURNING id, username, email, email_verified, is_admin, created_at;
 
 -- name: GetUserByID :one
-SELECT id, username, email, email_verified, is_admin, created_at
+SELECT id, username, email, email_verified, is_admin, created_at, avatar_version
 FROM users
 WHERE id = sqlc.arg(id);
 
 -- name: GetUserAuthByEmail :one
-SELECT id, username, email, email_verified, is_admin, created_at, password_hash
+SELECT id, username, email, email_verified, is_admin, created_at, password_hash, avatar_version
 FROM users
 WHERE lower(email) = lower(sqlc.arg(email));
 

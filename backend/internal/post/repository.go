@@ -27,10 +27,11 @@ func (r *Repository) WithTx(tx pgx.Tx) *Repository {
   return &Repository{q: r.q.WithTx(tx)}
 }
 
-func (r *Repository) CreatePost(ctx context.Context, id uuid.UUID, authorID *uuid.UUID, title string, totalSize int64) error {
+func (r *Repository) CreatePost(ctx context.Context, id uuid.UUID, authorID uuid.UUID, shortKey, title string, totalSize int64) error {
   _, err := r.q.CreatePost(ctx, db.CreatePostParams{
     ID:        id,
-    AuthorID:  uuidToPg(authorID),
+    AuthorID:  authorID,
+    ShortKey:  shortKey,
     Title:     title,
     TotalSize: totalSize,
   })
@@ -70,23 +71,38 @@ func (r *Repository) GetPost(ctx context.Context, id uuid.UUID) (Post, error) {
     }
     return Post{}, err
   }
+  return postFromRow(row.ID, row.AuthorID, row.ShortKey, row.Title, row.TotalSize, row.CreatedAt, row.Username, row.AvatarVersion), nil
+}
+
+func (r *Repository) GetPostByShortKey(ctx context.Context, shortKey string) (Post, error) {
+  row, err := r.q.GetPostByShortKey(ctx, shortKey)
+  if err != nil {
+    if errors.Is(err, pgx.ErrNoRows) {
+      return Post{}, ErrPostNotFound
+    }
+    return Post{}, err
+  }
+  return postFromRow(row.ID, row.AuthorID, row.ShortKey, row.Title, row.TotalSize, row.CreatedAt, row.Username, row.AvatarVersion), nil
+}
+
+// postFromRow собирает доменную модель Post из строки sqlc. GetPostRow и
+// GetPostByShortKeyRow имеют одинаковый набор полей, поэтому маппинг общий.
+func postFromRow(id, authorID uuid.UUID, shortKey, title string, totalSize int64, createdAt time.Time, username, avatarVersion pgtype.Text) Post {
   p := Post{
-    ID:        row.ID,
-    Title:     row.Title,
-    TotalSize: row.TotalSize,
-    CreatedAt: row.CreatedAt,
+    ID:        id,
+    AuthorID:  authorID,
+    ShortKey:  shortKey,
+    Title:     title,
+    TotalSize: totalSize,
+    CreatedAt: createdAt,
   }
-  if row.AuthorID.Valid {
-    id := uuid.UUID(row.AuthorID.Bytes)
-    p.AuthorID = &id
-    if row.Username.Valid {
-      p.AuthorUsername = row.Username.String
-    }
-    if row.AvatarVersion.Valid {
-      p.AvatarVersion = row.AvatarVersion.String
-    }
+  if username.Valid {
+    p.AuthorUsername = username.String
   }
-  return p, nil
+  if avatarVersion.Valid {
+    p.AvatarVersion = avatarVersion.String
+  }
+  return p
 }
 
 func (r *Repository) Sections(ctx context.Context, postID uuid.UUID) ([]Section, error) {
@@ -132,13 +148,7 @@ func (r *Repository) DeletePost(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *Repository) UserStorageUsed(ctx context.Context, authorID uuid.UUID) (int64, error) {
-  return r.q.GetUserStorageUsed(ctx, pgtype.UUID{Bytes: authorID, Valid: true})
-}
-
-// DeleteExpiredAnonPosts удаляет просроченные анонимные посты (CASCADE сносит
-// sections и files). Используется фоновым воркером.
-func (r *Repository) DeleteExpiredAnonPosts(ctx context.Context, cutoff time.Time) error {
-  return r.q.DeleteExpiredAnonPosts(ctx, cutoff)
+  return r.q.GetUserStorageUsed(ctx, authorID)
 }
 
 // AllStorageKeys возвращает все storage_key опубликованных файлов. Нужен
@@ -151,7 +161,7 @@ func (r *Repository) AllStorageKeys(ctx context.Context) ([]string, error) {
 // сервисом, чтобы понять, есть ли следующая страница.
 func (r *Repository) ListByAuthor(ctx context.Context, authorID uuid.UUID, limit int) ([]PostListItem, error) {
   rows, err := r.q.ListPostsByAuthor(ctx, db.ListPostsByAuthorParams{
-    AuthorID:  uuidToPg(&authorID),
+    AuthorID:  authorID,
     PageLimit: int32(limit),
   })
   if err != nil {
@@ -159,7 +169,7 @@ func (r *Repository) ListByAuthor(ctx context.Context, authorID uuid.UUID, limit
   }
   items := make([]PostListItem, len(rows))
   for i, row := range rows {
-    items[i] = listItem(row.ID, row.Title, row.TotalSize, row.CreatedAt)
+    items[i] = listItem(row.ID, row.ShortKey, row.Title, row.TotalSize, row.CreatedAt)
   }
   return items, nil
 }
@@ -167,7 +177,7 @@ func (r *Repository) ListByAuthor(ctx context.Context, authorID uuid.UUID, limit
 // ListByAuthorAfter — следующая страница после курсора (created_at, id).
 func (r *Repository) ListByAuthorAfter(ctx context.Context, authorID uuid.UUID, createdAt time.Time, cursorID uuid.UUID, limit int) ([]PostListItem, error) {
   rows, err := r.q.ListPostsByAuthorAfter(ctx, db.ListPostsByAuthorAfterParams{
-    AuthorID:        uuidToPg(&authorID),
+    AuthorID:        authorID,
     CursorCreatedAt: createdAt,
     CursorID:        cursorID,
     PageLimit:       int32(limit),
@@ -177,18 +187,11 @@ func (r *Repository) ListByAuthorAfter(ctx context.Context, authorID uuid.UUID, 
   }
   items := make([]PostListItem, len(rows))
   for i, row := range rows {
-    items[i] = listItem(row.ID, row.Title, row.TotalSize, row.CreatedAt)
+    items[i] = listItem(row.ID, row.ShortKey, row.Title, row.TotalSize, row.CreatedAt)
   }
   return items, nil
 }
 
-func listItem(id uuid.UUID, title string, totalSize int64, createdAt time.Time) PostListItem {
-  return PostListItem{ID: id, Title: title, TotalSize: totalSize, CreatedAt: createdAt}
-}
-
-func uuidToPg(id *uuid.UUID) pgtype.UUID {
-  if id == nil {
-    return pgtype.UUID{}
-  }
-  return pgtype.UUID{Bytes: *id, Valid: true}
+func listItem(id uuid.UUID, shortKey, title string, totalSize int64, createdAt time.Time) PostListItem {
+  return PostListItem{ID: id, ShortKey: shortKey, Title: title, TotalSize: totalSize, CreatedAt: createdAt}
 }

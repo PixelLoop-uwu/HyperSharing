@@ -16,6 +16,8 @@ type User struct {
   EmailVerified bool      `json:"email_verified"`
   IsAdmin       bool      `json:"is_admin"`
   CreatedAt     time.Time `json:"created_at"`
+  AvatarVersion *string   `json:"avatar_version"`
+
 }
 
 // UserAuth — пользователь вместе с хешем пароля. Только для проверки при входе.

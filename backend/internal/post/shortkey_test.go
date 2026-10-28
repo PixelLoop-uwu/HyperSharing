@@ -30,13 +30,13 @@ func TestNewShortKey(t *testing.T) {
 }
 
 func TestOwnerUserID(t *testing.T) {
-  if _, ok := ownerUserID(draft.OwnerIPPrefix + "abc"); ok {
-    t.Fatal("ip owner must not parse as user")
+  if _, err := ownerUserID("ip:abc"); err == nil {
+    t.Fatal("non-user owner must error")
   }
-  if _, ok := ownerUserID(draft.OwnerUserPrefix + "not-a-uuid"); ok {
-    t.Fatal("malformed user owner must not parse")
+  if _, err := ownerUserID(draft.OwnerUserPrefix + "not-a-uuid"); err == nil {
+    t.Fatal("malformed user owner must error")
   }
-  if _, ok := ownerUserID(draft.OwnerUserPrefix + "00000000-0000-0000-0000-000000000000"); !ok {
+  if _, err := ownerUserID(draft.OwnerUserPrefix + "00000000-0000-0000-0000-000000000000"); err != nil {
     t.Fatal("valid user owner must parse")
   }
 }

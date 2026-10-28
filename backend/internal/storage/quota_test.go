@@ -14,7 +14,7 @@ func newTestQuota(t *testing.T) *Quota {
   mr := miniredis.RunT(t)
   rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
   t.Cleanup(func() { _ = rdb.Close() })
-  return NewQuota(rdb, 100, 1000)
+  return NewQuota(rdb, 100)
 }
 
 func TestQuotaReserveUnderLimit(t *testing.T) {

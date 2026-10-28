@@ -55,8 +55,9 @@ type DraftFileRead struct {
 
 type PostRead struct {
   ID        uuid.UUID     `json:"id"`
+  ShortKey  string        `json:"short_key"`
   Title     string        `json:"title"`
-  Author    *AuthorRead   `json:"author"` // nil = аноним
+  Author    *AuthorRead   `json:"author"`
   CreatedAt time.Time     `json:"created_at"`
   Sections  []SectionRead `json:"sections"`
 }
@@ -80,6 +81,7 @@ type FileRead struct {
 
 type PostListItem struct {
   ID        uuid.UUID `json:"id"`
+  ShortKey  string    `json:"short_key"`
   Title     string    `json:"title"`
   TotalSize int64     `json:"total_size"`
   CreatedAt time.Time `json:"created_at"`
@@ -106,7 +108,8 @@ type QuotaRead struct {
 
 type Post struct {
   ID             uuid.UUID
-  AuthorID       *uuid.UUID
+  AuthorID       uuid.UUID
+  ShortKey       string
   AuthorUsername string
   AvatarVersion  string
   Title          string

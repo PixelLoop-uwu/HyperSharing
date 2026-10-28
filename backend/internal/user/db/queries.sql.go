@@ -98,7 +98,7 @@ func (q *Queries) GetAvatarVersion(ctx context.Context, id uuid.UUID) (pgtype.Te
 }
 
 const getUserAuthByEmail = `-- name: GetUserAuthByEmail :one
-SELECT id, username, email, email_verified, is_admin, created_at, password_hash
+SELECT id, username, email, email_verified, is_admin, created_at, password_hash, avatar_version
 FROM users
 WHERE lower(email) = lower($1)
 `
@@ -111,6 +111,7 @@ type GetUserAuthByEmailRow struct {
 	IsAdmin       bool
 	CreatedAt     time.Time
 	PasswordHash  string
+	AvatarVersion pgtype.Text
 }
 
 func (q *Queries) GetUserAuthByEmail(ctx context.Context, email string) (GetUserAuthByEmailRow, error) {
@@ -124,12 +125,13 @@ func (q *Queries) GetUserAuthByEmail(ctx context.Context, email string) (GetUser
 		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.PasswordHash,
+		&i.AvatarVersion,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, email_verified, is_admin, created_at
+SELECT id, username, email, email_verified, is_admin, created_at, avatar_version
 FROM users
 WHERE id = $1
 `
@@ -141,6 +143,7 @@ type GetUserByIDRow struct {
 	EmailVerified bool
 	IsAdmin       bool
 	CreatedAt     time.Time
+	AvatarVersion pgtype.Text
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
@@ -153,6 +156,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow
 		&i.EmailVerified,
 		&i.IsAdmin,
 		&i.CreatedAt,
+		&i.AvatarVersion,
 	)
 	return i, err
 }

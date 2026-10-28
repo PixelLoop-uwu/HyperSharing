@@ -55,7 +55,6 @@ func run() error {
 
   w := worker.New(post.NewRepository(pool), user.NewRepository(pool), s3c.Bucket(cfg.S3.Bucket), worker.Config{
     Interval:       cfg.Worker.Interval,
-    AnonTTL:        cfg.Posts.AnonTTL,
     AbandonedAge:   cfg.Worker.AbandonedUploadAge,
     OrphanAge:      cfg.Worker.OrphanObjectAge,
     ObjectPrefix:   cfg.Uploads.ObjectPrefix,

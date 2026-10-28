@@ -17,7 +17,8 @@ CREATE UNIQUE INDEX users_email_uniq ON users (lower(email));
 
 CREATE TABLE posts (
   id         uuid PRIMARY KEY,
-  author_id  uuid REFERENCES users(id) ON DELETE CASCADE,
+  author_id  uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  short_key  text NOT NULL UNIQUE,
   title      text NOT NULL DEFAULT '',
   total_size bigint NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()

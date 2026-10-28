@@ -1,7 +1,7 @@
 -- name: CreatePost :one
-INSERT INTO posts (id, author_id, title, total_size)
-VALUES (sqlc.arg(id), sqlc.arg(author_id), sqlc.arg(title), sqlc.arg(total_size))
-RETURNING id, author_id, title, total_size, created_at;
+INSERT INTO posts (id, author_id, short_key, title, total_size)
+VALUES (sqlc.arg(id), sqlc.arg(author_id), sqlc.arg(short_key), sqlc.arg(title), sqlc.arg(total_size))
+RETURNING id, author_id, short_key, title, total_size, created_at;
 
 -- name: CreateSection :one
 INSERT INTO sections (id, post_id, position, body)
@@ -14,10 +14,16 @@ VALUES (sqlc.arg(id), sqlc.arg(post_id), sqlc.arg(section_id), sqlc.arg(position
 RETURNING id, post_id, section_id, position, name, mime_type, size, storage_key, short_key, created_at;
 
 -- name: GetPost :one
-SELECT p.id, p.author_id, p.title, p.total_size, p.created_at, u.username, u.avatar_version
+SELECT p.id, p.author_id, p.short_key, p.title, p.total_size, p.created_at, u.username, u.avatar_version
 FROM posts p
 LEFT JOIN users u ON u.id = p.author_id
 WHERE p.id = sqlc.arg(id);
+
+-- name: GetPostByShortKey :one
+SELECT p.id, p.author_id, p.short_key, p.title, p.total_size, p.created_at, u.username, u.avatar_version
+FROM posts p
+LEFT JOIN users u ON u.id = p.author_id
+WHERE p.short_key = sqlc.arg(short_key);
 
 -- name: GetSectionsByPost :many
 SELECT id, post_id, position, body
@@ -42,22 +48,18 @@ FROM files f
 JOIN posts p ON p.id = f.post_id
 WHERE p.author_id = sqlc.arg(author_id);
 
--- name: DeleteExpiredAnonPosts :exec
-DELETE FROM posts
-WHERE author_id IS NULL AND created_at < sqlc.arg(cutoff);
-
 -- name: AllStorageKeys :many
 SELECT storage_key FROM files;
 
 -- name: ListPostsByAuthor :many
-SELECT id, title, total_size, created_at
+SELECT id, short_key, title, total_size, created_at
 FROM posts
 WHERE author_id = sqlc.arg(author_id)
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_limit);
 
 -- name: ListPostsByAuthorAfter :many
-SELECT id, title, total_size, created_at
+SELECT id, short_key, title, total_size, created_at
 FROM posts
 WHERE author_id = sqlc.arg(author_id)
   AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::uuid)

@@ -131,15 +131,14 @@ func uploadMeta(u handler.FileInfo) (uuid.UUID, uuid.UUID, bool) {
   return draftID, fileID, err1 == nil && err2 == nil
 }
 
-// requesterOwner — владелец запрашивающего (сессия из контекста + IP). Сессия
-// попадает в hook.Context, потому что tus смонтирован через OptionalAuth.
+// requesterOwner — владелец запрашивающего (сессия из контекста). Сессия
+// попадает в hook.Context, потому что tus смонтирован через RequireAuth.
 func requesterOwner(hook handler.HookEvent) string {
   u := user.UserFrom(hook.Context)
-  var id *uuid.UUID
-  if u != nil {
-    id = &u.ID
+  if u == nil {
+    return ""
   }
-  return draft.Owner(id, draft.IPFromAddr(hook.HTTPRequest.RemoteAddr))
+  return draft.Owner(u.ID)
 }
 
 // storageKey — детерминированный ключ объекта в MinIO для слота.

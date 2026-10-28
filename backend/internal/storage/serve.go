@@ -23,11 +23,10 @@ type ServeHandler struct {
   notFoundLimit int
   downloadLimit int
   window        time.Duration
-  anonTTL       time.Duration
 }
 
-func NewServeHandler(files *FileRepository, bucket *s3x.Bucket, limiter *ratelimit.Limiter, notFoundLimit, downloadLimit int, window, anonTTL time.Duration) *ServeHandler {
-  return &ServeHandler{files: files, bucket: bucket, limiter: limiter, notFoundLimit: notFoundLimit, downloadLimit: downloadLimit, window: window, anonTTL: anonTTL}
+func NewServeHandler(files *FileRepository, bucket *s3x.Bucket, limiter *ratelimit.Limiter, notFoundLimit, downloadLimit int, window time.Duration) *ServeHandler {
+  return &ServeHandler{files: files, bucket: bucket, limiter: limiter, notFoundLimit: notFoundLimit, downloadLimit: downloadLimit, window: window}
 }
 
 func (h *ServeHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
@@ -38,12 +37,6 @@ func (h *ServeHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
       return
     }
     httpx.Internal(w, r, err)
-    return
-  }
-
-  // Просроченный анонимный пост: файл не отдаём, даже до прогона воркера.
-  if f.AuthorID == nil && time.Since(f.PostCreatedAt) > h.anonTTL {
-    h.notFound(w, r)
     return
   }
 

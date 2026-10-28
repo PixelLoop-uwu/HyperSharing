@@ -4,7 +4,6 @@ import (
   "context"
   "errors"
   "fmt"
-  "strings"
   "time"
 
   "github.com/redis/go-redis/v9"
@@ -18,13 +17,12 @@ const quotaKeyTTL = 48 * time.Hour
 // (создание драфта / DELETE /drafts/{id}). Reserve — авторитетный и атомарный;
 // повторной проверки на старте загрузки нет (она давала бы двойной учёт).
 type Quota struct {
-  rdb       *redis.Client
-  anonDaily int64
-  userDaily int64
+  rdb   *redis.Client
+  daily int64
 }
 
-func NewQuota(rdb *redis.Client, anonDaily, userDaily int64) *Quota {
-  return &Quota{rdb: rdb, anonDaily: anonDaily, userDaily: userDaily}
+func NewQuota(rdb *redis.Client, daily int64) *Quota {
+  return &Quota{rdb: rdb, daily: daily}
 }
 
 // Reserve атомарно увеличивает сегодняшний счётчик владельца на bytes.
@@ -32,7 +30,7 @@ func NewQuota(rdb *redis.Client, anonDaily, userDaily int64) *Quota {
 func (q *Quota) Reserve(ctx context.Context, owner string, bytes int64) error {
   res, err := quotaReserveScript.Run(ctx, q.rdb,
     []string{quotaKey(owner)},
-    bytes, q.limitFor(owner), int64(quotaKeyTTL.Seconds()),
+    bytes, q.daily, int64(quotaKeyTTL.Seconds()),
   ).Slice()
   if err != nil {
     return fmt.Errorf("quota: reserve: %w", err)
@@ -69,16 +67,9 @@ func (q *Quota) Get(ctx context.Context, owner string) (int64, error) {
   return cur, nil
 }
 
-// Limit возвращает дневной лимит загрузки для владельца.
-func (q *Quota) Limit(owner string) int64 {
-  return q.limitFor(owner)
-}
-
-func (q *Quota) limitFor(owner string) int64 {
-  if strings.HasPrefix(owner, "user:") {
-    return q.userDaily
-  }
-  return q.anonDaily
+// Limit возвращает дневной лимит загрузки.
+func (q *Quota) Limit() int64 {
+  return q.daily
 }
 
 func quotaKey(owner string) string {

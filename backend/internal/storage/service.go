@@ -24,13 +24,11 @@ type Config struct {
   ObjectPrefix   string
   MetadataPrefix string
 
-  QuotaAnonDailyBytes int64
-  QuotaUserDailyBytes int64
+  DailyBytes int64
 
   FileNotFoundLimit int
   DownloadLimit     int
   RateLimitWindow   time.Duration
-  AnonTTL           time.Duration
 
   TusBasePath string // внешний путь tus, например "/api/v1/uploads/"
 }
@@ -48,7 +46,7 @@ type Service struct {
 }
 
 func New(cfg Config, rdb *redis.Client, pool *pgxpool.Pool, bucket *s3x.Bucket, drafts *draft.Store, limiter *ratelimit.Limiter) (*Service, error) {
-  quota := NewQuota(rdb, cfg.QuotaAnonDailyBytes, cfg.QuotaUserDailyBytes)
+  quota := NewQuota(rdb, cfg.DailyBytes)
   files := NewFileRepository(pool)
 
   tus, err := newTusHandler(cfg, drafts)
@@ -71,5 +69,5 @@ func (s *Service) Quota() *Quota {
 
 // ServeFile — обработчик GET /f/{shortKey}.
 func (s *Service) ServeFile() http.HandlerFunc {
-  return NewServeHandler(s.files, s.bucket, s.limiter, s.rl.FileNotFoundLimit, s.rl.DownloadLimit, s.rl.RateLimitWindow, s.rl.AnonTTL).ServeFile
+  return NewServeHandler(s.files, s.bucket, s.limiter, s.rl.FileNotFoundLimit, s.rl.DownloadLimit, s.rl.RateLimitWindow).ServeFile
 }

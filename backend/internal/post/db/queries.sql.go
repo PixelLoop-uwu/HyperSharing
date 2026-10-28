@@ -97,14 +97,15 @@ func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (CreateF
 }
 
 const createPost = `-- name: CreatePost :one
-INSERT INTO posts (id, author_id, title, total_size)
-VALUES ($1, $2, $3, $4)
-RETURNING id, author_id, title, total_size, created_at
+INSERT INTO posts (id, author_id, short_key, title, total_size)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, author_id, short_key, title, total_size, created_at
 `
 
 type CreatePostParams struct {
 	ID        uuid.UUID
-	AuthorID  pgtype.UUID
+	AuthorID  uuid.UUID
+	ShortKey  string
 	Title     string
 	TotalSize int64
 }
@@ -113,6 +114,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 	row := q.db.QueryRow(ctx, createPost,
 		arg.ID,
 		arg.AuthorID,
+		arg.ShortKey,
 		arg.Title,
 		arg.TotalSize,
 	)
@@ -120,6 +122,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.ShortKey,
 		&i.Title,
 		&i.TotalSize,
 		&i.CreatedAt,
@@ -155,16 +158,6 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (S
 		&i.Body,
 	)
 	return i, err
-}
-
-const deleteExpiredAnonPosts = `-- name: DeleteExpiredAnonPosts :exec
-DELETE FROM posts
-WHERE author_id IS NULL AND created_at < $1
-`
-
-func (q *Queries) DeleteExpiredAnonPosts(ctx context.Context, cutoff time.Time) error {
-	_, err := q.db.Exec(ctx, deleteExpiredAnonPosts, cutoff)
-	return err
 }
 
 const deletePost = `-- name: DeletePost :one
@@ -232,7 +225,7 @@ func (q *Queries) GetFilesByPost(ctx context.Context, postID uuid.UUID) ([]GetFi
 }
 
 const getPost = `-- name: GetPost :one
-SELECT p.id, p.author_id, p.title, p.total_size, p.created_at, u.username, u.avatar_version
+SELECT p.id, p.author_id, p.short_key, p.title, p.total_size, p.created_at, u.username, u.avatar_version
 FROM posts p
 LEFT JOIN users u ON u.id = p.author_id
 WHERE p.id = $1
@@ -240,7 +233,8 @@ WHERE p.id = $1
 
 type GetPostRow struct {
 	ID            uuid.UUID
-	AuthorID      pgtype.UUID
+	AuthorID      uuid.UUID
+	ShortKey      string
 	Title         string
 	TotalSize     int64
 	CreatedAt     time.Time
@@ -254,6 +248,41 @@ func (q *Queries) GetPost(ctx context.Context, id uuid.UUID) (GetPostRow, error)
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.ShortKey,
+		&i.Title,
+		&i.TotalSize,
+		&i.CreatedAt,
+		&i.Username,
+		&i.AvatarVersion,
+	)
+	return i, err
+}
+
+const getPostByShortKey = `-- name: GetPostByShortKey :one
+SELECT p.id, p.author_id, p.short_key, p.title, p.total_size, p.created_at, u.username, u.avatar_version
+FROM posts p
+LEFT JOIN users u ON u.id = p.author_id
+WHERE p.short_key = $1
+`
+
+type GetPostByShortKeyRow struct {
+	ID            uuid.UUID
+	AuthorID      uuid.UUID
+	ShortKey      string
+	Title         string
+	TotalSize     int64
+	CreatedAt     time.Time
+	Username      pgtype.Text
+	AvatarVersion pgtype.Text
+}
+
+func (q *Queries) GetPostByShortKey(ctx context.Context, shortKey string) (GetPostByShortKeyRow, error) {
+	row := q.db.QueryRow(ctx, getPostByShortKey, shortKey)
+	var i GetPostByShortKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.AuthorID,
+		&i.ShortKey,
 		&i.Title,
 		&i.TotalSize,
 		&i.CreatedAt,
@@ -302,7 +331,7 @@ JOIN posts p ON p.id = f.post_id
 WHERE p.author_id = $1
 `
 
-func (q *Queries) GetUserStorageUsed(ctx context.Context, authorID pgtype.UUID) (int64, error) {
+func (q *Queries) GetUserStorageUsed(ctx context.Context, authorID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, getUserStorageUsed, authorID)
 	var total int64
 	err := row.Scan(&total)
@@ -310,7 +339,7 @@ func (q *Queries) GetUserStorageUsed(ctx context.Context, authorID pgtype.UUID) 
 }
 
 const listPostsByAuthor = `-- name: ListPostsByAuthor :many
-SELECT id, title, total_size, created_at
+SELECT id, short_key, title, total_size, created_at
 FROM posts
 WHERE author_id = $1
 ORDER BY created_at DESC, id DESC
@@ -318,12 +347,13 @@ LIMIT $2
 `
 
 type ListPostsByAuthorParams struct {
-	AuthorID  pgtype.UUID
+	AuthorID  uuid.UUID
 	PageLimit int32
 }
 
 type ListPostsByAuthorRow struct {
 	ID        uuid.UUID
+	ShortKey  string
 	Title     string
 	TotalSize int64
 	CreatedAt time.Time
@@ -340,6 +370,7 @@ func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorPa
 		var i ListPostsByAuthorRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ShortKey,
 			&i.Title,
 			&i.TotalSize,
 			&i.CreatedAt,
@@ -355,7 +386,7 @@ func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorPa
 }
 
 const listPostsByAuthorAfter = `-- name: ListPostsByAuthorAfter :many
-SELECT id, title, total_size, created_at
+SELECT id, short_key, title, total_size, created_at
 FROM posts
 WHERE author_id = $1
   AND (created_at, id) < ($2::timestamptz, $3::uuid)
@@ -364,7 +395,7 @@ LIMIT $4
 `
 
 type ListPostsByAuthorAfterParams struct {
-	AuthorID        pgtype.UUID
+	AuthorID        uuid.UUID
 	CursorCreatedAt time.Time
 	CursorID        uuid.UUID
 	PageLimit       int32
@@ -372,6 +403,7 @@ type ListPostsByAuthorAfterParams struct {
 
 type ListPostsByAuthorAfterRow struct {
 	ID        uuid.UUID
+	ShortKey  string
 	Title     string
 	TotalSize int64
 	CreatedAt time.Time
@@ -393,6 +425,7 @@ func (q *Queries) ListPostsByAuthorAfter(ctx context.Context, arg ListPostsByAut
 		var i ListPostsByAuthorAfterRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ShortKey,
 			&i.Title,
 			&i.TotalSize,
 			&i.CreatedAt,

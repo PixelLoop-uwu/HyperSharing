@@ -27,7 +27,8 @@ type File struct {
 
 type Post struct {
 	ID        uuid.UUID
-	AuthorID  pgtype.UUID
+	AuthorID  uuid.UUID
+	ShortKey  string
 	Title     string
 	TotalSize int64
 	CreatedAt time.Time

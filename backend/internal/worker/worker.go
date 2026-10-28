@@ -1,7 +1,7 @@
-// Package worker — фоновая очистка: просроченные анонимные посты, брошенные
-// tus-загрузки и сиротские объекты в S3. Запускается отдельным бинарём
-// cmd/worker. Источник правды для «живых» объектов — БД (files.storage_key);
-// возраст объектов отсекает ещё не опубликованные файлы активных драфтов.
+// Package worker — фоновая очистка: брошенные tus-загрузки и сиротские объекты
+// в S3. Запускается отдельным бинарём cmd/worker. Источник правды для «живых»
+// объектов — БД (files.storage_key); возраст объектов отсекает ещё не
+// опубликованные файлы активных драфтов.
 package worker
 
 import (
@@ -16,7 +16,6 @@ import (
 
 type Config struct {
   Interval       time.Duration
-  AnonTTL        time.Duration // срок жизни анонимного поста
   AbandonedAge   time.Duration // старше этого — брошенная загрузка
   OrphanAge      time.Duration // старше этого — сиротский объект (должно быть > DraftTTL)
   ObjectPrefix   string        // files/ — финальные объекты
@@ -55,7 +54,6 @@ func (w *Worker) runAll(ctx context.Context) {
     name string
     fn   func(context.Context) error
   }{
-    {"expired_posts", w.cleanupExpiredPosts},
     {"abandoned_uploads", w.cleanupAbandonedUploads},
     {"orphan_objects", w.cleanupOrphanObjects},
     {"orphan_avatars", w.cleanupOrphanAvatars},
@@ -65,12 +63,6 @@ func (w *Worker) runAll(ctx context.Context) {
       slog.Error("worker job failed", "job", j.name, "err", err)
     }
   }
-}
-
-// cleanupExpiredPosts удаляет просроченные анонимные посты (CASCADE сносит
-// секции и файлы). Объекты в S3 зачистит cleanupOrphanObjects.
-func (w *Worker) cleanupExpiredPosts(ctx context.Context) error {
-  return w.repo.DeleteExpiredAnonPosts(ctx, time.Now().Add(-w.cfg.AnonTTL))
 }
 
 // cleanupAbandonedUploads отменяет брошенные multipart-загрузки и удаляет
